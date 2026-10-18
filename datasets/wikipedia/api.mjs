@@ -4,13 +4,13 @@ import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from 
 
 const ARTICLES = 'wikipedia_articles';
 const PAGEVIEWS = 'wikipedia_pageviews';
-const TITLE = 'lowerUTF8(__raw_data.title::String)';
-const TEXT = 'lowerUTF8(__raw_data.text::String)';
+const TITLE = 'lowerUTF8(title::String)';
+const TEXT = 'lowerUTF8(text::String)';
 const FIELDS = ['text', 'title', 'both'];
 // Desktop and mobile web views of the English Wikipedia; pageview titles use underscores instead of spaces.
-const WIKIS = `__raw_data.domain_code::String IN ('en', 'en.m')`;
-const PAGE_TITLE = `__raw_data.page_title::String`;
-const ARTICLE_PAGE_TITLE = `replaceAll(__raw_data.title::String, ' ', '_')`;
+const WIKIS = `domain_code::String IN ('en', 'en.m')`;
+const PAGE_TITLE = `page_title::String`;
+const ARTICLE_PAGE_TITLE = `replaceAll(title::String, ' ', '_')`;
 
 function buildFilter(params)
 {
@@ -34,14 +34,14 @@ async function search(params)
 FROM ${ARTICLES}
 WHERE ${where}`;
     const topSql = `WITH ${matches}
-SELECT ${PAGE_TITLE} AS page_title, sum(__raw_data.count_views::Int64) AS views
+SELECT ${PAGE_TITLE} AS page_title, sum(count_views::Int64) AS views
 FROM ${PAGEVIEWS}
 WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
 GROUP BY page_title
 ORDER BY views DESC
 LIMIT ${limit}`;
     const timelineSql = `WITH ${matches}
-SELECT __raw_data.hour::DateTime AS bucket, if(__raw_data.domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(__raw_data.count_views::Int64) AS value
+SELECT hour::DateTime AS bucket, if(domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(count_views::Int64) AS value
 FROM ${PAGEVIEWS}
 WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
 GROUP BY bucket, series
@@ -50,11 +50,11 @@ ORDER BY bucket, series`;
 
     // Snippets for the most viewed articles; if the pageviews table has no match yet, fall back to arbitrary matching articles.
     const titles = top.data.map((row) => row.page_title.replaceAll('_', ' '));
-    const hitsSql = `SELECT __raw_data.title::String AS title, __raw_data.url::String AS url,
-       length(__raw_data.text::String) AS bytes,
-       ${snippet('__raw_data.text::String', tokens)} AS snippet
+    const hitsSql = `SELECT title::String AS title, url::String AS url,
+       length(text::String) AS bytes,
+       ${snippet('text::String', tokens)} AS snippet
 FROM ${ARTICLES}
-WHERE ${titles.length ? `__raw_data.title::String IN (${titles.map(literal).join(', ')})` : where}
+WHERE ${titles.length ? `title::String IN (${titles.map(literal).join(', ')})` : where}
 LIMIT ${limit}`;
     const hits = await query(hitsSql);
     const views = new Map(top.data.map((row) => [row.page_title.replaceAll('_', ' '), Number(row.views)]));
@@ -83,11 +83,11 @@ async function analytics(params)
 top AS (
     SELECT ${PAGE_TITLE} AS t FROM ${PAGEVIEWS}
     WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
-    GROUP BY t ORDER BY sum(__raw_data.count_views::Int64) DESC LIMIT 6
+    GROUP BY t ORDER BY sum(count_views::Int64) DESC LIMIT 6
 )
-SELECT toStartOfInterval(__raw_data.hour::DateTime, INTERVAL 6 HOUR) AS bucket,
+SELECT toStartOfInterval(hour::DateTime, INTERVAL 6 HOUR) AS bucket,
        replaceAll(if(${PAGE_TITLE} IN top, ${PAGE_TITLE}, 'other'), '_', ' ') AS series,
-       sum(__raw_data.count_views::Int64) AS value
+       sum(count_views::Int64) AS value
 FROM ${PAGEVIEWS}
 WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
 GROUP BY bucket, series
@@ -97,17 +97,17 @@ SELECT argMax(hour, views) AS busiest_hour, max(views) AS busiest_hour_views, ro
        sum(views) AS total_views, round(sum(mobile) / sum(views) * 100, 1) AS mobile_percent
 FROM
 (
-    SELECT __raw_data.hour::DateTime AS hour, sum(__raw_data.count_views::Int64) AS views,
-           sumIf(__raw_data.count_views::Int64, __raw_data.domain_code::String = 'en.m') AS mobile
+    SELECT hour::DateTime AS hour, sum(count_views::Int64) AS views,
+           sumIf(count_views::Int64, domain_code::String = 'en.m') AS mobile
     FROM ${PAGEVIEWS}
     WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
     GROUP BY hour
 )`;
     const lengthSql = `SELECT multiIf(b < 2048, '< 2 KB', b < 8192, '2-8 KB', b < 32768, '8-32 KB', b < 131072, '32-128 KB', '>= 128 KB') AS label, count() AS value, min(b) AS min_bytes
-FROM (SELECT length(__raw_data.text::String) AS b FROM ${ARTICLES} WHERE ${where})
+FROM (SELECT length(text::String) AS b FROM ${ARTICLES} WHERE ${where})
 GROUP BY label
 ORDER BY min_bytes`;
-    const longestSql = `SELECT __raw_data.title::String AS label, round(length(__raw_data.text::String) / 1024) AS value
+    const longestSql = `SELECT title::String AS label, round(length(text::String) / 1024) AS value
 FROM ${ARTICLES}
 WHERE ${where}
 ORDER BY value DESC
@@ -124,8 +124,8 @@ LIMIT 10`;
 async function stats()
 {
     const [articles, pageviews] = await Promise.all([
-        query(`SELECT count() AS articles, sum(length(__raw_data.text::String)) AS text_bytes FROM ${ARTICLES}`),
-        query(`SELECT count() AS rows, min(__raw_data.hour::DateTime) AS first_hour, max(__raw_data.hour::DateTime) AS last_hour FROM ${PAGEVIEWS}`).catch(() => ({ data: [{}] })),
+        query(`SELECT count() AS articles, sum(length(text::String)) AS text_bytes FROM ${ARTICLES}`),
+        query(`SELECT count() AS rows, min(hour::DateTime) AS first_hour, max(hour::DateTime) AS last_hour FROM ${PAGEVIEWS}`).catch(() => ({ data: [{}] })),
     ]);
     return { ...articles.data[0], pageview_rows: pageviews.data[0].rows, first_hour: pageviews.data[0].first_hour, last_hour: pageviews.data[0].last_hour };
 }
