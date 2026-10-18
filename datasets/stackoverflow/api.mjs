@@ -1,7 +1,153 @@
-// Placeholder: search, analytics and stats routes for the Stack Overflow dataset.
+// Search, analytics and stats for Stack Overflow posts (`stackoverflow_posts`, questions and answers 2008-2024).
+import { literal, query } from '../../lib/rawtree.mjs';
+import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+
+const POSTS = 'stackoverflow_posts';
+const TITLE = 'lowerUTF8(__raw_data.Title::String)';
+const BODY = 'lowerUTF8(__raw_data.Body::String)';
+const TYPES = { questions: '__raw_data.PostTypeId::Int64 = 1', answers: '__raw_data.PostTypeId::Int64 = 2', all: '__raw_data.PostTypeId::Int64 IN (1, 2)' };
+const FIELDS = ['body', 'title', 'both'];
+const CREATED = '__raw_data.CreationDate::DateTime64(3)';
+const TAGS = `arrayFilter(t -> t != '', splitByChar('|', __raw_data.Tags::String))`;
+const PLAIN_BODY = `replaceRegexpAll(replaceRegexpAll(__raw_data.Body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
+
+function buildFilter(params)
+{
+    const { tokens, mode } = parseSearch(params);
+    const field = FIELDS.includes(params.get('field')) ? params.get('field') : 'both';
+    const type = TYPES[params.get('type')] ? params.get('type') : 'all';
+    const conditions = [TYPES[type]];
+    conditions.push({
+        body: textCondition(BODY, tokens, mode),
+        title: textCondition(TITLE, tokens, mode),
+        both: `(${textCondition(TITLE, tokens, mode)} OR ${textCondition(BODY, tokens, mode)})`,
+    }[field]);
+    const tag = (params.get('tag') ?? '').trim().toLowerCase();
+    if (tag && /^[a-z0-9.+#-]{1,40}$/.test(tag))
+        conditions.push(`position(__raw_data.Tags::String, ${literal(`|${tag}|`)}) > 0`);
+    const from = intParam(params, 'from', 2008, 2008, 2024);
+    const to = intParam(params, 'to', 2024, 2008, 2024);
+    if (from > 2008)
+        conditions.push(`${CREATED} >= toDateTime64('${from}-01-01 00:00:00', 3)`);
+    if (to < 2024)
+        conditions.push(`${CREATED} < toDateTime64('${to + 1}-01-01 00:00:00', 3)`);
+    return { tokens, where: conditions.join('\n  AND ') };
+}
+
+const postUrl = (row) => `https://stackoverflow.com/${row.type === 1 ? 'q' : 'a'}/${row.id}`;
+
+async function search(params)
+{
+    const { tokens, where } = buildFilter(params);
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const sort = params.get('sort') === 'recent' ? `${CREATED} DESC` : '__raw_data.Score::Int64 DESC';
+    const hitsSql = `SELECT __raw_data.Id::Int64 AS id, __raw_data.PostTypeId::Int64 AS type,
+       toInt64OrZero(toString(__raw_data.ParentId)) AS parent_id,
+       __raw_data.Title::String AS title, __raw_data.Tags::String AS tags,
+       __raw_data.Score::Int64 AS score, __raw_data.ViewCount::Int64 AS views, __raw_data.AnswerCount::Int64 AS answers,
+       ${CREATED} AS created,
+       ${snippet(PLAIN_BODY, tokens)} AS snippet
+FROM ${POSTS}
+WHERE ${where}
+ORDER BY ${sort}
+LIMIT ${limit}`;
+    const countSql = `SELECT count() AS matches, countIf(__raw_data.PostTypeId::Int64 = 1) AS questions, countIf(__raw_data.PostTypeId::Int64 = 2) AS answers
+FROM ${POSTS}
+WHERE ${where}`;
+    const timelineSql = `SELECT toStartOfMonth(${CREATED}) AS bucket, if(__raw_data.PostTypeId::Int64 = 1, 'questions', 'answers') AS series, count() AS value
+FROM ${POSTS}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+
+    // Answers have no title or tags: take them from the parent question.
+    const parentIds = [...new Set(hits.data.filter((row) => row.type === 2 && row.parent_id).map((row) => Number(row.parent_id)))];
+    let parents = null;
+    if (parentIds.length)
+        parents = await query(`SELECT __raw_data.Id::Int64 AS id, __raw_data.Title::String AS title, __raw_data.Tags::String AS tags
+FROM ${POSTS}
+WHERE __raw_data.PostTypeId::Int64 = 1 AND __raw_data.Id::Int64 IN (${parentIds.join(', ')})`);
+    const byId = new Map((parents?.data ?? []).map((row) => [Number(row.id), row]));
+    const rows = hits.data.map((row) =>
+    {
+        const parent = byId.get(Number(row.parent_id));
+        const tags = (row.tags || parent?.tags || '').split('|').filter(Boolean);
+        return {
+            title: row.type === 1 ? row.title : `Answer: ${parent?.title ?? `question ${row.parent_id}`}`,
+            url: postUrl(row),
+            snippet: row.snippet,
+            meta: [
+                `${row.score} score`,
+                ...(row.type === 1 ? [`${Number(row.views).toLocaleString('en-US')} views`, `${row.answers} answers`] : []),
+                String(row.created).slice(0, 10),
+            ],
+            tags,
+        };
+    });
+    return {
+        tokens,
+        total: Number(count.data[0]?.matches ?? 0),
+        hits: rows,
+        timeline: { title: 'Matching posts per month', kind: 'stack', result: timeline },
+        queries: [{ title: 'Top posts', ...hits }, { title: 'Matching posts', ...count }, ...(parents ? [{ title: 'Parent questions', ...parents }] : [])],
+    };
+}
+
+async function analytics(params)
+{
+    const { where } = buildFilter(params);
+    const perTagSql = `WITH top_tags AS (
+    SELECT arrayJoin(${TAGS}) AS tag FROM ${POSTS}
+    WHERE ${where}
+    GROUP BY tag ORDER BY count() DESC LIMIT 6
+)
+SELECT toStartOfQuarter(${CREATED}) AS bucket,
+       if(arrayFirst(t -> t IN top_tags, ${TAGS}) AS first_top_tag = '', 'other', first_top_tag) AS series,
+       count() AS value
+FROM ${POSTS}
+WHERE ${where} AND __raw_data.PostTypeId::Int64 = 1
+GROUP BY bucket, series
+ORDER BY bucket, value DESC`;
+    const tagsSql = `SELECT arrayJoin(${TAGS}) AS label, count() AS value
+FROM ${POSTS}
+WHERE ${where} AND __raw_data.PostTypeId::Int64 = 1
+GROUP BY label ORDER BY value DESC LIMIT 12`;
+    const peakSql = `SELECT argMax(month, posts) AS busiest_month, max(posts) AS busiest_month_posts, round(avg(posts)) AS avg_posts_per_month, sum(posts) AS total_posts
+FROM
+(
+    SELECT toStartOfMonth(${CREATED}) AS month, count() AS posts
+    FROM ${POSTS}
+    WHERE ${where}
+    GROUP BY month
+)`;
+    const qualitySql = `SELECT round(avg(__raw_data.Score::Int64), 2) AS avg_score,
+       round(countIf(toInt64OrZero(toString(__raw_data.AcceptedAnswerId)) > 0) / count() * 100, 1) AS accepted_percent,
+       round(avg(__raw_data.AnswerCount::Int64), 2) AS avg_answers,
+       quantile(0.5)(__raw_data.ViewCount::Int64) AS median_views,
+       max(__raw_data.ViewCount::Int64) AS max_views
+FROM ${POSTS}
+WHERE ${where} AND __raw_data.PostTypeId::Int64 = 1`;
+    const panels = await Promise.all([
+        panel({ title: 'Matching questions per quarter by top tag', kind: 'stack', wide: true }, query(perTagSql)),
+        panel({ title: 'Peak month', kind: 'kv' }, query(peakSql)),
+        panel({ title: 'Top tags of matching questions', kind: 'bars' }, query(tagsSql)),
+        panel({ title: 'Matching questions', kind: 'kv' }, query(qualitySql)),
+    ]);
+    return { panels };
+}
+
+async function stats()
+{
+    const result = await query(`SELECT count() AS posts, countIf(__raw_data.PostTypeId::Int64 = 1) AS questions, countIf(__raw_data.PostTypeId::Int64 = 2) AS answers,
+       min(${CREATED}) AS first_post, max(${CREATED}) AS last_post
+FROM ${POSTS}`);
+    return result.data[0];
+}
+
 export default {
     id: 'stackoverflow',
     title: 'Stack Overflow',
-    description: 'Full-text search over Stack Overflow questions and answers, with tag, score and time analytics.',
-    routes: {},
+    description: 'Full-text search over Stack Overflow questions and answers (2008-2024), with tag, score and time analytics.',
+    routes: { search, analytics, stats },
 };

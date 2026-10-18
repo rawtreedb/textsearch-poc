@@ -3,11 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stack Overflow search on RawTree</title>
+<title>Stack Overflow search · RawTree</title>
 <link rel="stylesheet" href="/common/style.css">
 </head>
 <body>
-<header><div class="wrap"><a class="brand" href="/">RawTree text search</a><span class="muted">/ Stack Overflow</span></div></header>
-<main class="wrap"><p class="lead">Coming soon.</p></main>
+<header><div class="wrap"><a class="brand" href="/">RawTree text search</a><nav><a class="pill" href="/wikipedia/">Wikipedia</a><a class="pill active" href="/stackoverflow/">Stack Overflow</a></nav></div></header>
+<main class="wrap">
+  <h1>Search Stack Overflow</h1>
+  <p class="lead">Full-text search over about 60M Stack Overflow questions and answers (2008-2024) with the RawTree text index, with tag, score and time analytics.</p>
+  <details class="query"><summary>Dataset</summary><div class="card" id="stats" style="max-width:480px"></div></details>
+  <form class="search" id="form"></form>
+  <div class="examples" id="examples"></div>
+  <div class="tabs"><button class="pill" id="tab-results" type="button">Results</button><button class="pill" id="tab-analytics" type="button">Analytics</button></div>
+  <div class="summary" id="summary"></div>
+  <div id="output"></div>
+</main>
+<script>
+window.APP = {
+  api: '/api/stackoverflow',
+  filters: [
+    { name: 'field', label: 'Field', options: [['both', 'title or body'], ['body', 'body'], ['title', 'title']] },
+    { name: 'type', label: 'Post type', options: [['all', 'questions + answers'], ['questions', 'questions'], ['answers', 'answers']] },
+    { name: 'sort', label: 'Sort', options: [['score', 'top score'], ['recent', 'most recent']] },
+    { name: 'tag', label: 'Tag', placeholder: 'tag, e.g. rust' },
+    { name: 'from', label: 'From year', type: 'number', placeholder: 'from 2008' },
+    { name: 'to', label: 'To year', type: 'number', placeholder: 'to 2024' },
+  ],
+  examples: [{ q: 'borrow checker' }, { q: 'segmentation fault', tag: 'c' }, { q: 'undefined is not a function', mode: 'phrase' }, { q: 'kubernetes', type: 'questions' }],
+};
+</script>
+<script src="/common/app.js"></script>
 </body>
 </html>

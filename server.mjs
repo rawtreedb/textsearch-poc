@@ -24,15 +24,6 @@ const TYPES = {
     '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
 };
 
-export class HttpError extends Error
-{
-    constructor(status, message)
-    {
-        super(message);
-        this.status = status;
-    }
-}
-
 function send(res, status, body, type = 'application/json')
 {
     res.writeHead(status, { 'content-type': type, 'cache-control': type === 'application/json' ? 'no-store' : 'public, max-age=300' });
