@@ -51,7 +51,10 @@ async function search(params)
 {
     const { tokens, where } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const order = params.get('sort') === 'title' ? `JSONExtractString(${META}, 'title')` : `lengthUTF8(${TEXT}) DESC`;
+    const sort = params.get('sort');
+    const order = sort === 'longest' ? `lengthUTF8(${TEXT}) DESC`
+        : sort === 'title' ? `JSONExtractString(${META}, 'title')`
+            : `JSONExtractInt(${META}, 'text_id') ASC`;
     const hitsSql = `SELECT JSONExtractInt(${META}, 'text_id') AS id, JSONExtractString(${META}, 'title') AS title,
        ${AUTHORS_RAW} AS authors, JSONExtractString(${META}, 'issued') AS issued,
        ${snippet(TEXT, tokens)} AS snippet, lengthUTF8(${TEXT}) AS text_length

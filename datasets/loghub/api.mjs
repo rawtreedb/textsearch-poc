@@ -6,6 +6,11 @@ const LABEL = '__raw_data.label::String';
 export const SYSTEMS = ['HDFS_v1','HDFS_v2','HDFS_v3_TraceBench','Hadoop','Spark','Zookeeper','OpenStack','BGL','HPC','Thunderbird','Windows','Linux','Mac','Android_v1','Android_v2','HealthApp','Apache','SSH','Proxifier'];
 const TS = 'parseDateTimeBestEffortOrNull(ts::String)';
 
+function displayTimestamp(value)
+{
+    return value ? String(value).replace('T', ' ').replace(/\.\d+(?:Z)?$/, '') : '';
+}
+
 function filter(params)
 {
     const { tokens, mode } = parseSearch(params);
@@ -32,7 +37,7 @@ async function search(params)
     const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timeSql)]);
     return {
         tokens, total: Number(count.data[0]?.matches ?? 0),
-        hits: hits.data.map((r) => ({ title: `${r.system}${r.component ? ` · ${r.component}` : ''}${r.level ? ` · ${r.level}` : ''}${r.ts ? ` · ${r.ts}` : ''}`, url: '', snippet: r.snippet, meta: [r.file, `line ${r.line_no}`, r.label && r.label !== '-' ? `alert: ${r.label}` : ''].filter(Boolean) })),
+        hits: hits.data.map((r) => ({ title: `${r.system}${r.component ? ` · ${r.component}` : ''}${r.level ? ` · ${r.level}` : ''}${r.ts ? ` · ${displayTimestamp(r.ts)}` : ''}`, url: '', snippet: r.snippet, meta: [r.file, `line ${r.line_no}`, r.label && r.label !== '-' ? `alert: ${r.label}` : ''].filter(Boolean) })),
         timeline: { title: 'Matches by month and system', kind: 'stack', result: timeline },
         queries: [{ title: 'Matching log lines', ...hits }, { title: 'Matching log lines', ...count }, { title: 'Timeline', ...timeline }],
     };

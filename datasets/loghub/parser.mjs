@@ -31,8 +31,12 @@ export function parseLog(system, line)
         return { ts: null, level: null, component: m[1].trim(), message: m[2], label: null };
     if (/^Android_/.test(system) && (m = line.match(/^\d\d-\d\d\s+(\d\d:\d\d:\d\d\.\d+)\s+\d+\s+\d+\s+([VDIWEF])\s+([^:]+):\s*(.*)$/)))
         return { ts: null, level: m[2], component: m[3], message: m[4], label: null };
-    if (system === 'HealthApp' && (m = line.match(/^(\d{8})-(\d\d:\d\d:\d\d):(\d{1,3})\|([^|]+)\|[^|]+\|(.*)$/)))
-        return { ts: iso(`${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6, 8)}`, `${m[2]}.${m[3].padStart(3, '0')}`), level: null, component: m[4], message: m[5], label: null };
+    if (system === 'HealthApp' && (m = line.match(/^(\d{6}|\d{8})-(\d{1,2}):(\d{1,2}):(\d{1,2}):(\d{1,3})\|([^|]+)\|[^|]+\|(.*)$/)))
+    {
+        const date = m[1].length === 8 ? `${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6, 8)}` : '';
+        const time = `${m[2].padStart(2, '0')}:${m[3].padStart(2, '0')}:${m[4].padStart(2, '0')}.${m[5].padStart(3, '0')}`;
+        return { ts: date ? iso(date, time) : null, level: null, component: m[6], message: m[7], label: null };
+    }
     if (system === 'Apache' && (m = line.match(/^\[([^\]]+)\]\s+\[(\w+)\]\s+(.*)$/)))
         return { ts: Number.isNaN(Date.parse(`${m[1]} UTC`)) ? null : new Date(`${m[1]} UTC`).toISOString(), level: m[2], component: null, message: m[3], label: null };
     if (system === 'Proxifier' && (m = line.match(/^\[\d\d\.\d\d \d\d:\d\d:\d\d\]\s+(.+?)\s+-\s+(.*)$/)))

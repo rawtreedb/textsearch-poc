@@ -10,7 +10,7 @@ window.APP = {
   stats: [['books', 'Books'], ['total_text_chars', 'Text characters']], api: '/api/gutenberg',
   filters: [
     { name: 'field', label: 'Field', options: [['text', 'book text'], ['title', 'title'], ['author', 'author']] },
-    { name: 'sort', label: 'Sort', options: [['length', 'longest text'], ['title', 'title']] },
+    { name: 'sort', label: 'Sort', options: [['id', 'Gutenberg ID (oldest first)'], ['longest', 'longest text'], ['title', 'title']] },
     { name: 'author', label: 'Author', placeholder: 'author contains' },
     { name: 'subject', label: 'Subject', placeholder: 'subject contains' },
     { name: 'bookshelf', label: 'Bookshelf', placeholder: 'bookshelf contains' },
