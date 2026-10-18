@@ -24,7 +24,8 @@ window.APP = {
   stats: [['articles', 'Articles'], ['text_bytes', 'Article text', 'bytes'], ['pageview_rows', 'Pageview rows']],
   api: '/api/wikipedia',
   filters: [{ name: 'field', label: 'Field', options: [['text', 'article text'], ['title', 'title'], ['both', 'title or text']] }],
-  examples: [{ q: 'quantum entanglement' }, { q: 'to be or not to be', mode: 'phrase' }, { q: 'taylor swift' }, { q: 'eiffel', field: 'title' }, { q: 'überlingen' }],
+  modes: [['all', 'All words'], ['any', 'Any word'], ['phrase', 'Exact phrase'], ['semantic', 'Semantic']],
+  examples: [{ q: 'quantum entanglement' }, { q: 'to be or not to be', mode: 'phrase' }, { q: 'taylor swift' }, { q: 'eiffel', field: 'title' }, { q: 'überlingen' }, { q: 'why do stars explode', mode: 'semantic' }],
 };
 </script>
 <script src="/common/app.js"></script>

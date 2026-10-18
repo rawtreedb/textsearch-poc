@@ -110,6 +110,7 @@ createServer(async (req, res) =>
     catch (error)
     {
         console.error(`[web] ${req.method} ${url.pathname}: ${error.message}`);
-        return send(res, error.status && error.status < 500 ? error.status : 502, { error: error.message, hint: error.hint });
+        const status = Number.isInteger(error.status) && error.status >= 400 && error.status <= 599 ? error.status : 502;
+        return send(res, status, { error: error.message, hint: error.hint });
     }
 }).listen(PORT, () => console.log(`[web] listening on :${PORT} (datasets: ${[...datasets.keys()].join(', ')})`));

@@ -10,8 +10,10 @@ on:
         type: choice
         options:
           - wikipedia/load.mjs
+          - wikipedia/embed.mjs
           - wikipedia/load_pageviews.mjs
           - stackoverflow/load.mjs
+          - stackoverflow/embed.mjs
           - hackernews/load.mjs
           - amazon/load.mjs
           - arxiv/load.mjs
