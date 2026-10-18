@@ -69,6 +69,6 @@ One-time setup:
 
 1. VM with ports 80/443 open and port 22 reachable from GitHub Actions runners (key-only auth).
 2. Add repository (or `production` environment) secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (private key), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <host>`), `RAWTREE_API_KEY` and optionally `RAWTREE_QUERY_API_KEY`.
-3. Optional variables `DOMAIN` (default `:80`) and `RAWTREE_DATABASE` (default `default`).
+3. Optional variables `DOMAIN` (default `textsearch.rawtree.dev`; `:80` serves plain HTTP on the IP) and `RAWTREE_DATABASE` (default `default`).
 
 Loaders run on the VM as detached one-off containers via the "Load dataset" workflow (`.github/workflows/load.yml`), or by hand with `docker compose run -d --rm --name load-x app node datasets/<id>/<loader>.mjs [args]`.
