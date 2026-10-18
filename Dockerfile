@@ -1,8 +1,9 @@
 FROM node:22-slim
 WORKDIR /app
-ENV NODE_ENV=production PORT=8080
+ENV NODE_ENV=production PORT=8080 MODELS_DIR=/app/models ALLOW_REMOTE_MODELS=false
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+RUN node --input-type=module -e "import { AutoTokenizer, CLIPTextModelWithProjection, env } from '@huggingface/transformers'; env.cacheDir = '/app/models'; const model = 'Xenova/clip-vit-base-patch32'; await AutoTokenizer.from_pretrained(model); await CLIPTextModelWithProjection.from_pretrained(model, { dtype: 'fp32' });"
 COPY server.mjs ./
 COPY lib ./lib
 COPY datasets ./datasets

@@ -9,7 +9,7 @@ const num = (n) => (typeof n === 'number' || /^-?\d+(\.\d+)?$/.test(String(n)) ?
 const compact = (n) => Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n));
 const bytes = (n) => { const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; n = Number(n); while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; } return `${n.toFixed(i ? 1 : 0)} ${units[i]}`; };
 const COLORS = ['#0c47f3', '#02b078', '#ee9a48', '#e11d48', '#7c3aed', '#0891b2', '#a8a29e'];
-const DATASETS = [['wikipedia', 'Wikipedia'], ['stackoverflow', 'Stack Overflow']];
+const DATASETS = [['wikipedia', 'Wikipedia'], ['stackoverflow', 'Stack Overflow'], ['laion', 'LAION images']];
 const REPO = 'https://github.com/rawtreedb/textsearch-poc';
 let tab = 'results';
 let queries = [];
@@ -55,9 +55,11 @@ function renderShell()
 
 function renderForm()
 {
+    const modes = APP.modes ?? [['all', 'All words'], ['any', 'Any word'], ['phrase', 'Exact phrase']];
     $('f').innerHTML = [
         `<input type="search" name="q" placeholder="${esc(APP.placeholder ?? 'Search…')}" required autofocus>`,
-        `<select name="mode" title="Match mode"><option value="all">All words</option><option value="any">Any word</option><option value="phrase">Exact phrase</option></select>`,
+        `<select name="mode" title="Match mode">${modes.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`,
+        ...(APP.results === 'images' ? ['<input type="hidden" name="similar">'] : []),
         ...filters.map((f) => f.options
             ? `<select name="${f.name}" title="${esc(f.label)}">${f.options.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`
             : `<input class="small" name="${f.name}" type="${f.type ?? 'text'}" placeholder="${esc(f.placeholder ?? f.label)}" title="${esc(f.label)}">`),
@@ -72,7 +74,14 @@ function renderForm()
         readState(new URLSearchParams(q));
         run(true);
     };
-    $('f').onsubmit = (event) => { event.preventDefault(); run(true); };
+    $('f').onsubmit = (event) =>
+    {
+        event.preventDefault();
+        const similar = $('f').elements.namedItem('similar');
+        if (similar)
+            similar.value = '';
+        run(true);
+    };
     for (const name of ['results', 'analytics'])
         $(`tab-${name}`).onclick = () => { tab = name; renderTabs(); run(true); };
     $('copy').onclick = () => navigator.clipboard?.writeText(queries[queryIndex]?.sql ?? '');
@@ -239,18 +248,49 @@ async function run(push = false)
             $('hits').onclick = (event) => event.target.dataset.p !== undefined && $(`psql-${event.target.dataset.p}`).classList.toggle('open');
             return;
         }
-        const r = await fetchJson(`${api}/search?${search}`);
+        const route = APP.results === 'images' ? 'images' : 'search';
+        const r = await fetchJson(`${api}/${route}?${search}`);
         if (current !== generation)
             return;
-        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${r.hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
-        renderQueries([...r.queries, ...(r.timeline.result ? [{ ...r.timeline.result, title: r.timeline.title }] : [])]);
-        $('hits').innerHTML = r.hits.map((h) => `<div class="hit">
+        if (r.blocked)
+        {
+            $('meta').innerHTML = `<span class="error">This query is blocked by the content-safety filter.</span>`;
+            renderQueries([]);
+            $('hits').innerHTML = '<div class="empty">Try a different image description.</div>';
+            return;
+        }
+        const hits = r.hits ?? [];
+        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
+        renderQueries([...(r.queries ?? []), ...(r.timeline?.result ? [{ ...r.timeline.result, title: r.timeline.title }] : [])]);
+        if (APP.results === 'images')
+        {
+            $('hits').innerHTML = `<div class="image-grid">${hits.map((h) => `<article class="image-tile">
+<img src="${esc(h.url)}" loading="lazy" referrerpolicy="no-referrer" alt="${esc(h.caption)}">
+<div class="image-caption" title="${esc(h.caption)}">${esc(h.caption)}</div>
+<div class="image-info"><span>CLIP ${Number(h.score).toFixed(3)}</span><button type="button" class="similar" data-similar="${esc(h.id)}">Similar</button></div>
+</article>`).join('') || '<div class="empty">No images found.</div>'}</div>`;
+            for (const image of $('hits').querySelectorAll('.image-tile img'))
+                image.addEventListener('error', () => image.closest('.image-tile')?.remove(), { once: true });
+            $('hits').onclick = (event) =>
+            {
+                const button = event.target.closest('button[data-similar]');
+                if (!button)
+                    return;
+                const similar = $('f').elements.namedItem('similar');
+                similar.value = button.dataset.similar;
+                $('f').elements.namedItem('mode').value = 'semantic';
+                run(true);
+            };
+            $('aside').innerHTML = '';
+            return;
+        }
+        $('hits').innerHTML = hits.map((h) => `<div class="hit">
 <a class="title" href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>
 <div class="text">…${highlight(h.snippet, r.tokens)}…</div>
 <div class="info">${h.meta.map((m) => `<span>${esc(m)}</span>`).join('')}${(h.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}<a href="${esc(h.url)}" target="_blank" rel="noopener">Open ↗</a></div>
 </div>`).join('') || '<div class="empty">No matches.</div>';
         const t = r.timeline;
-        $('aside').innerHTML = `<div class="card"><h3>${esc(t.title)}</h3>${panelBody(t)}</div>`;
+        $('aside').innerHTML = t ? `<div class="card"><h3>${esc(t.title)}</h3>${panelBody(t)}</div>` : '';
     }
     catch (error)
     {

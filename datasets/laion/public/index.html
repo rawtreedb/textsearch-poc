@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAION-400M image search · RawTree</title>
+<link rel="icon" href="/common/favicon.ico" sizes="48x48">
+<link rel="icon" href="/common/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/common/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/common/style.css">
+</head>
+<body>
+<script>
+window.APP = {
+  id: 'laion',
+  title: 'Find images by describing what you want to see.',
+  eyebrow: 'Static dataset · LAION-400M',
+  lead: 'A filtered slice of LAION-400M images and captions, searched by CLIP ViT-B/32 text embeddings or caption words.',
+  placeholder: 'Describe an image, e.g. a red bicycle',
+  source: 'LAION-400M embeddings (public image URLs and captions)',
+  stats: [['images', 'Images'], ['avg_similarity', 'Avg. CLIP match', 'num'], ['shards', 'Shards']],
+  api: '/api/laion',
+  results: 'images',
+  modes: [['semantic', 'Semantic'], ['caption', 'Caption contains all words']],
+  examples: [
+    { q: 'a red bicycle' },
+    { q: 'sunset over mountains' },
+    { q: 'golden retriever puppy' },
+    { q: 'vintage car' },
+  ],
+};
+</script>
+<script src="/common/app.js"></script>
+</body>
+</html>

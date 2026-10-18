@@ -135,3 +135,11 @@ form:has(input.small) { border-radius:20px; padding:10px 10px 10px 22px; }
 form:has(input.small) input[type=search] { flex-basis:100%; }
 form:has(input.small) button.pill { margin-left:auto; }
 @media (max-width:720px) { form input.small { flex:1 1 25%; width:auto; min-width:0; } }
+.image-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; padding-bottom:48px; }
+.image-tile { min-width:0; overflow:hidden; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+.image-tile img { display:block; width:100%; aspect-ratio:1; object-fit:cover; background:var(--bg); }
+.image-caption { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; min-height:38px; padding:12px 12px 4px; color:var(--fg); font-size:13px; line-height:1.45; }
+.image-info { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 12px 12px; color:var(--muted); font:11px var(--mono); }
+.similar { border:1px solid var(--line); border-radius:999px; background:var(--bg); color:var(--fg); padding:5px 10px; font:12px var(--sans); cursor:pointer; }
+.similar:hover { color:var(--brand); border-color:var(--brand); }
+@media (max-width:520px) { .image-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; } .image-tile img { aspect-ratio:1; } }
