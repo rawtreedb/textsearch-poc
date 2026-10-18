@@ -24,6 +24,7 @@ function renderNav()
     const nav = document.querySelector('header nav');
     const links = datasets.map(({ id, title, path }) => `<a class="pill${id === APP.id ? ' active' : ''}" href="${esc(path)}">${esc(title)}</a>`).join('');
     nav.innerHTML = `<div class="dataset-pills">${links}</div><a class="pill ext" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a>`;
+    nav.querySelector('.pill.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function renderShell()
