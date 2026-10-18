@@ -1,7 +1,138 @@
-// Placeholder: search, analytics and stats routes for the Wikipedia dataset.
+// Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
+import { literal, query } from '../../lib/rawtree.mjs';
+import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+
+const ARTICLES = 'wikipedia_articles';
+const PAGEVIEWS = 'wikipedia_pageviews';
+const TITLE = 'lowerUTF8(__raw_data.title::String)';
+const TEXT = 'lowerUTF8(__raw_data.text::String)';
+const FIELDS = ['text', 'title', 'both'];
+// Desktop and mobile web views of the English Wikipedia; pageview titles use underscores instead of spaces.
+const WIKIS = `__raw_data.domain_code::String IN ('en', 'en.m')`;
+const PAGE_TITLE = `__raw_data.page_title::String`;
+const ARTICLE_PAGE_TITLE = `replaceAll(__raw_data.title::String, ' ', '_')`;
+
+function buildFilter(params)
+{
+    const { tokens, mode } = parseSearch(params);
+    const field = FIELDS.includes(params.get('field')) ? params.get('field') : 'text';
+    const conditions = {
+        text: textCondition(TEXT, tokens, mode),
+        title: textCondition(TITLE, tokens, mode),
+        both: `(${textCondition(TITLE, tokens, mode)} OR ${textCondition(TEXT, tokens, mode)})`,
+    };
+    const where = conditions[field];
+    const matches = `matches AS (SELECT ${ARTICLE_PAGE_TITLE} FROM ${ARTICLES} WHERE ${where})`;
+    return { tokens, mode, field, where, matches };
+}
+
+async function search(params)
+{
+    const { tokens, where, matches } = buildFilter(params);
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const countSql = `SELECT count() AS matches, sum(length(__raw_data.text::String)) AS bytes
+FROM ${ARTICLES}
+WHERE ${where}`;
+    const topSql = `WITH ${matches}
+SELECT ${PAGE_TITLE} AS page_title, sum(__raw_data.count_views::Int64) AS views
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+GROUP BY page_title
+ORDER BY views DESC
+LIMIT ${limit}`;
+    const timelineSql = `WITH ${matches}
+SELECT __raw_data.hour::DateTime AS bucket, if(__raw_data.domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(__raw_data.count_views::Int64) AS value
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    const [count, top, timeline] = await Promise.all([query(countSql), query(topSql), query(timelineSql)]);
+
+    // Snippets for the most viewed articles; if the pageviews table has no match yet, fall back to arbitrary matching articles.
+    const titles = top.data.map((row) => row.page_title.replaceAll('_', ' '));
+    const hitsSql = `SELECT __raw_data.title::String AS title, __raw_data.url::String AS url,
+       length(__raw_data.text::String) AS bytes,
+       ${snippet('__raw_data.text::String', tokens)} AS snippet
+FROM ${ARTICLES}
+WHERE ${titles.length ? `__raw_data.title::String IN (${titles.map(literal).join(', ')})` : where}
+LIMIT ${limit}`;
+    const hits = await query(hitsSql);
+    const views = new Map(top.data.map((row) => [row.page_title.replaceAll('_', ' '), Number(row.views)]));
+    const rows = hits.data
+        .map((row) => ({ ...row, views: views.get(row.title) ?? 0 }))
+        .sort((a, b) => b.views - a.views)
+        .map((row) => ({
+            title: row.title,
+            url: row.url,
+            snippet: row.snippet,
+            meta: [`${row.views.toLocaleString('en-US')} views`, `${(Number(row.bytes) / 1024).toFixed(1)} KB`],
+        }));
+    return {
+        tokens,
+        total: Number(count.data[0]?.matches ?? 0),
+        hits: rows,
+        timeline: { title: 'Hourly pageviews of matching articles', kind: 'stack', result: timeline },
+        queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }],
+    };
+}
+
+async function analytics(params)
+{
+    const { where, matches } = buildFilter(params);
+    const topArticlesSql = `WITH ${matches},
+top AS (
+    SELECT ${PAGE_TITLE} AS t FROM ${PAGEVIEWS}
+    WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+    GROUP BY t ORDER BY sum(__raw_data.count_views::Int64) DESC LIMIT 6
+)
+SELECT toStartOfInterval(__raw_data.hour::DateTime, INTERVAL 6 HOUR) AS bucket,
+       replaceAll(if(${PAGE_TITLE} IN top, ${PAGE_TITLE}, 'other'), '_', ' ') AS series,
+       sum(__raw_data.count_views::Int64) AS value
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+GROUP BY bucket, series
+ORDER BY bucket, value DESC`;
+    const peakSql = `WITH ${matches}
+SELECT argMax(hour, views) AS busiest_hour, max(views) AS busiest_hour_views, round(avg(views)) AS avg_views_per_hour,
+       sum(views) AS total_views, round(sum(mobile) / sum(views) * 100, 1) AS mobile_percent
+FROM
+(
+    SELECT __raw_data.hour::DateTime AS hour, sum(__raw_data.count_views::Int64) AS views,
+           sumIf(__raw_data.count_views::Int64, __raw_data.domain_code::String = 'en.m') AS mobile
+    FROM ${PAGEVIEWS}
+    WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+    GROUP BY hour
+)`;
+    const lengthSql = `SELECT multiIf(b < 2048, '< 2 KB', b < 8192, '2-8 KB', b < 32768, '8-32 KB', b < 131072, '32-128 KB', '>= 128 KB') AS label, count() AS value, min(b) AS min_bytes
+FROM (SELECT length(__raw_data.text::String) AS b FROM ${ARTICLES} WHERE ${where})
+GROUP BY label
+ORDER BY min_bytes`;
+    const longestSql = `SELECT __raw_data.title::String AS label, round(length(__raw_data.text::String) / 1024) AS value
+FROM ${ARTICLES}
+WHERE ${where}
+ORDER BY value DESC
+LIMIT 10`;
+    const panels = await Promise.all([
+        panel({ title: 'Pageviews of the top matching articles (6-hour buckets)', kind: 'stack', wide: true }, query(topArticlesSql)),
+        panel({ title: 'Peak hour', kind: 'kv' }, query(peakSql)),
+        panel({ title: 'Matching articles by length', kind: 'bars' }, query(lengthSql)),
+        panel({ title: 'Longest matching articles (KB)', kind: 'bars' }, query(longestSql)),
+    ]);
+    return { panels };
+}
+
+async function stats()
+{
+    const [articles, pageviews] = await Promise.all([
+        query(`SELECT count() AS articles, sum(length(__raw_data.text::String)) AS text_bytes FROM ${ARTICLES}`),
+        query(`SELECT count() AS rows, min(__raw_data.hour::DateTime) AS first_hour, max(__raw_data.hour::DateTime) AS last_hour FROM ${PAGEVIEWS}`).catch(() => ({ data: [{}] })),
+    ]);
+    return { ...articles.data[0], pageview_rows: pageviews.data[0].rows, first_hour: pageviews.data[0].first_hour, last_hour: pageviews.data[0].last_hour };
+}
+
 export default {
     id: 'wikipedia',
     title: 'Wikipedia',
-    description: 'Full-text search over Wikipedia articles, with hourly pageview analytics.',
-    routes: {},
+    description: 'Full-text search over English Wikipedia articles, ranked and charted by hourly pageviews.',
+    routes: { search, analytics, stats },
 };

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "for f in server.mjs lib/*.mjs datasets/*/*.mjs; do node --check \"$f\" || exit 1; done"
+    "check": "for f in server.mjs lib/*.mjs datasets/*/*.mjs public/common/*.js; do node --check \"$f\" || exit 1; done"
   },
   "dependencies": {
     "hyparquet": "1.31.4",
