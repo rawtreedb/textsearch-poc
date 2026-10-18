@@ -66,7 +66,16 @@ async function sendFile(res, root, relative)
 
 createServer(async (req, res) =>
 {
-    const url = new URL(req.url, 'http://localhost');
+    // Prefix instead of passing a base: `new URL('//', base)` parses as a host-less authority and throws.
+    let url;
+    try
+    {
+        url = new URL(`http://localhost${req.url}`);
+    }
+    catch
+    {
+        return send(res, 400, { error: 'bad request' });
+    }
     const parts = url.pathname.split('/').filter(Boolean);
     try
     {
