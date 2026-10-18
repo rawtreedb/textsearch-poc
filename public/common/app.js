@@ -104,6 +104,7 @@ function renderTabs()
     for (const name of ['results', 'analytics'])
         $(`tab-${name}`).classList.toggle('active', tab === name);
     document.body.classList.toggle('analytics-mode', tab === 'analytics');
+    document.body.classList.toggle('images-mode', APP.results === 'images');
 }
 
 function highlight(text, tokens)

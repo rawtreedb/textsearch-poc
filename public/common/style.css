@@ -129,6 +129,8 @@ header nav .pill.active { border-color:var(--fg); }
 form input.small { width:124px; border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:8px 14px; font:14px var(--sans); color:var(--fg); outline:none; }
 form input.small:focus { border-color:var(--brand); }
 body.analytics-mode main.wrap { grid-template-columns:1fr; }
+body.images-mode main.wrap { grid-template-columns:1fr; }
+body.images-mode aside { display:none; }
 body.analytics-mode aside, body.analytics-mode #under { display:none !important; }
 body:not(:has(#main)) main.wrap { display:block; }
 form:has(input.small) { border-radius:20px; padding:10px 10px 10px 22px; }
