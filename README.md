@@ -6,9 +6,11 @@ Full-text search and analytics demos on large, static, long-text datasets, the s
 |---|---|---|
 | `/wikipedia/` | Wikipedia articles (`wikimedia/wikipedia` on Hugging Face) + hourly pageviews (`dumps.wikimedia.org/other/pageviews`) | `/api/wikipedia/<route>` |
 | `/stackoverflow/` | Stack Overflow posts 2008-2024 (ClickHouse public Parquet dataset) | `/api/stackoverflow/<route>` |
-| `/laion/` | LAION-400M image URLs, captions and CLIP ViT-B/32 image embeddings | `/api/laion/<route>` |
+| `/laion/` (opt-in; disabled by default) | LAION-400M image URLs, captions and CLIP ViT-B/32 image embeddings | `/api/laion/<route>` |
 
 Each dataset lives in `datasets/<id>/`: `api.mjs` (routes), `public/` (UI), and its loader scripts. `lib/rawtree.mjs` is the shared RawTree API client. `server.mjs` loads the datasets listed in `DATASETS` (default `wikipedia,stackoverflow`).
+
+LAION remains in the repository but is disabled by default. To serve `/laion/`, add `laion` to `DATASETS` (for example, `DATASETS=wikipedia,stackoverflow,laion`) and load its data with `node datasets/laion/load.mjs`.
 
 ## Datasets and tables
 
@@ -69,7 +71,7 @@ node server.mjs                      # http://localhost:3000
 | `RAWTREE_QUERY_API_KEY` | `RAWTREE_API_KEY` | Optional `read_only` key for search queries |
 | `RAWTREE_DATABASE` | `default` | Database |
 | `RAWTREE_API_URL` | `https://api.rawtree.com` | API base URL |
-| `DATASETS` | `wikipedia,stackoverflow,laion` | Datasets to serve |
+| `DATASETS` | `wikipedia,stackoverflow` | Datasets to serve |
 | `DATA_DIR` | `/data` | Loader download and resume-state directory |
 | `PORT` | `3000` | HTTP port |
 
