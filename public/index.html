@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RawTree text search on static datasets</title>
+<link rel="stylesheet" href="/common/style.css">
+</head>
+<body>
+<header><div class="wrap"><a class="brand" href="/">RawTree text search</a></div></header>
+<main class="wrap">
+  <h1>Full-text search and analytics on static long-text datasets</h1>
+  <p class="lead">Each dataset is loaded once into RawTree and searched with the text index (<code>hasAllTokens</code>, <code>hasAnyTokens</code>, <code>hasPhrase</code>). Pick one:</p>
+  <div class="cards" id="datasets"></div>
+</main>
+<script>
+fetch('/api/datasets').then((r) => r.json()).then((list) =>
+{
+    const root = document.getElementById('datasets');
+    for (const d of list)
+    {
+        const a = document.createElement('a');
+        a.className = 'card';
+        a.href = d.path;
+        const h = document.createElement('h2');
+        h.textContent = d.title;
+        const p = document.createElement('p');
+        p.className = 'muted';
+        p.textContent = d.description;
+        a.append(h, p);
+        root.append(a);
+    }
+});
+</script>
+</body>
+</html>

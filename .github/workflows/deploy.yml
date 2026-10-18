@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run check
+      - run: docker build -t textsearch-poc .
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: textsearch-poc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Install Docker on the VM if missing
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" 'command -v docker >/dev/null && docker compose version >/dev/null 2>&1 || {
+            sudo apt-get update -q && sudo apt-get install -yq docker.io docker-compose-v2 rsync &&
+            sudo usermod -aG docker "$USER"; }'
+      - name: Copy code to the VM
+        run: rsync -az --delete --exclude .git --exclude .env --exclude node_modules ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+      - name: Rebuild and restart
+        run: ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && test -f .env || { echo 'Create ~/$DEPLOY_PATH/.env from .env.example first'; exit 1; } && sudo docker compose up -d --build --remove-orphans && sudo docker image prune -f"
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            if ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && sudo docker compose exec -T app node -e \"fetch('http://localhost:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""; then exit 0; fi
+            sleep 2
+          done
+          exit 1

@@ -1,0 +1,35 @@
+# Usage: create .env from .env.example, then `docker compose up -d --build`.
+# Loaders run as one-off containers, e.g. `docker compose run -d --rm --name load-wikipedia app node datasets/wikipedia/load.mjs`.
+services:
+  app:
+    build: .
+    image: textsearch-poc
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RAWTREE_API_KEY: ${RAWTREE_API_KEY:?set RAWTREE_API_KEY in .env}
+    volumes:
+      - loader_data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  loader_data:
+  caddy_data:
+  caddy_config:

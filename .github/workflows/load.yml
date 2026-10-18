@@ -1,0 +1,43 @@
+name: Load dataset
+
+# Starts a dataset loader as a detached one-off container on the VM. Loaders are resumable, so re-running continues where they stopped.
+on:
+  workflow_dispatch:
+    inputs:
+      loader:
+        description: Loader script under datasets/, e.g. wikipedia/load.mjs
+        required: true
+        type: choice
+        options:
+          - wikipedia/load.mjs
+          - wikipedia/load_pageviews.mjs
+          - stackoverflow/load.mjs
+      args:
+        description: Extra loader arguments (see README), e.g. --limit 100000
+        required: false
+        default: ''
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: textsearch-poc
+      LOADER: ${{ inputs.loader }}
+      ARGS: ${{ inputs.args }}
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$ARGS" =~ ^[A-Za-z0-9_.,:=\ -]*$ ]] || { echo "args may only contain letters, digits, spaces and _.,:=-"; exit 1; }
+      - name: Set up SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Start loader
+        run: |
+          name="load-$(echo "${LOADER%.mjs}" | tr '/_' '--')"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && sudo docker rm -f $name >/dev/null 2>&1; sudo docker compose run -d --rm --name $name app node datasets/$LOADER $ARGS && echo started $name"
