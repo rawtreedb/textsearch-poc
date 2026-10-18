@@ -12,6 +12,10 @@ on:
           - wikipedia/load.mjs
           - wikipedia/load_pageviews.mjs
           - stackoverflow/load.mjs
+          - hackernews/load.mjs
+          - amazon/load.mjs
+          - arxiv/load.mjs
+          - reddit/load.mjs
           - laion/load.mjs
       args:
         description: Extra loader arguments (see README), e.g. --limit 100000
