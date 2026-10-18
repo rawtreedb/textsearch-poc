@@ -25,8 +25,10 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | Table | Source | Rows | Loader |
 |---|---|---|---|
 | `wikipedia_articles` | [`wikimedia/wikipedia`](https://huggingface.co/datasets/wikimedia/wikipedia) `20231101.en`, 41 Parquet files (11.6 GB): `id, url, title, text` | 6.4M | `datasets/wikipedia/load.mjs` |
+| `wikipedia_vectors` | The same 41 Parquet files; article title + text embedded with `Xenova/all-MiniLM-L6-v2` (384 dimensions) | 6.4M | `datasets/wikipedia/embed.mjs` |
 | `wikipedia_pageviews` | [hourly pageview dumps](https://dumps.wikimedia.org/other/pageviews/), `en` (desktop) and `en.m` (mobile) lines: `domain_code, page_title, count_views, total_response_size, hour` | ~2.1M per hour (~350M per week) | `datasets/wikipedia/load_pageviews.mjs` |
 | `stackoverflow_posts` | [ClickHouse public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2008.parquet), one Parquet file per year 2008-2024 (38 GB): `Id, PostTypeId, ParentId, Title, Body, Tags, Score, ViewCount, CreationDate, ...` | ~60M | `datasets/stackoverflow/load.mjs` |
+| `stackoverflow_vectors` | The same yearly Parquet files; questions only, title + plain-text body embedded with `Xenova/all-MiniLM-L6-v2` (384 dimensions) | ~21M questions | `datasets/stackoverflow/embed.mjs` |
 | `hackernews_items` | [Hacker News public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/hackernews/2023-08-18.parquet): `id, deleted, type, by, time, text, dead, parent, url, score, title, ...` | 37,171,166 | `datasets/hackernews/load.mjs` |
 | `amazon_reviews` | [Amazon Reviews Parquet files](https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/): 1990s, 2000s, and 2010-2015 files | All source rows | `datasets/amazon/load.mjs` |
 | `arxiv_papers` | [`librarian-bots/arxiv-metadata-snapshot`](https://huggingface.co/datasets/librarian-bots/arxiv-metadata-snapshot), 11 Parquet files: `id, title, authors, categories, abstract, versions, update_date` | All source rows | `datasets/arxiv/load.mjs` |
@@ -35,12 +37,14 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | `loghub_lines` | [Loghub v1](https://zenodo.org/records/8196385), 19 `.zip`/`.tar.gz` archives; HDFS_v3_TraceBench is excluded because it contains structured traces, not log lines | ~480M log lines from the remaining 18 archives | `datasets/loghub/load.mjs` |
 | `laion_images` | [LAION-400M embeddings](https://deploy.laion.ai/8f83b608504d46bb81708ec86e912220/embeddings/), aligned `metadata/metadata_{N}.parquet` and `img_emb/img_emb_{N}.npy`: public `url`, `caption`, LAION caption-image similarity, original dimensions and normalized 512-d CLIP ViT-B/32 image vector | 2M rows per shard ID range (shard 0 has 1,000,448 rows) | `datasets/laion/load.mjs` |
 
-The article, Stack Overflow, four text-dataset, and Gutenberg loaders use server-side URL imports (`POST /v1/tables/<table>?url=...`), one file per request; Hugging Face redirects are resolved first because the import does not follow redirects. Loghub streams archive entries and inserts deterministic JSON batches. The pageview dumps are space-separated text, so that loader streams and parses them locally and inserts JSON batches. All loaders record finished files or archive entries in `$DATA_DIR` and use insert deduplication tokens, so re-running one resumes without duplicates. Text loaders add missing text indexes and materialize them after the first imported file or batch; later inserts build the index as they load.
+The article, Stack Overflow, four text-dataset, and Gutenberg loaders use server-side URL imports (`POST /v1/tables/<table>?url=...`), one file per request; Hugging Face redirects are resolved first because the import does not follow redirects. Loghub streams archive entries and inserts deterministic JSON batches. The pageview dumps are space-separated text, so that loader streams and parses them locally and inserts JSON batches. Loaders record finished files, archive entries, or embedding `file:rowgroup` units in `$DATA_DIR` and use insert deduplication tokens, so re-running one resumes without duplicates. Text loaders add missing text indexes and materialize them after the first imported file or batch; later files are indexed as they load.
 
 ```bash
 node datasets/wikipedia/load.mjs                      # --langs en --snapshot 20231101 --files N (first N files per language)
+node datasets/wikipedia/embed.mjs                     # --table wikipedia_vectors --files N --limit N --workers W --threads T --batch 1000
 node datasets/wikipedia/load_pageviews.mjs            # --from 2023-10-25 --days 7 --wikis en,en.m --concurrency 3
 node datasets/stackoverflow/load.mjs                  # --from 2008 --to 2024
+node datasets/stackoverflow/embed.mjs                 # --from 2008 --to 2024 --table stackoverflow_vectors --workers W --threads T --batch 1000
 node datasets/hackernews/load.mjs
 node datasets/amazon/load.mjs                         # --from 0 --to 7, or --files <name-or-index,...>
 node datasets/arxiv/load.mjs                          # --files 11 (first N files)
@@ -89,9 +93,31 @@ ALTER TABLE laion_images MATERIALIZE INDEX vector_idx;
 
 Don't add a text index on `wikipedia_pageviews.page_title`: checking the `page_title IN matches` set against it per granule made the pageviews join about 10x slower (10 s vs 1 s).
 
+The embedding loaders create their table with an explicit sorting key and add the vector index before inserting rows:
+
+```sql
+ALTER TABLE wikipedia_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
+ALTER TABLE stackoverflow_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
+```
+
+Each loader downloads its original Parquet source into `$DATA_DIR`, reads row groups locally, and removes the file when complete. Completed `file:rowgroup` entries and stable per-batch insert deduplication tokens make runs resumable. Wikipedia accepts `--files N`; Stack Overflow accepts inclusive `--from`/`--to` years. Both support `--limit N` (rows embedded in that run), `--workers W`, `--threads T`, and `--batch N`. Each worker is a Node child process with one MiniLM/ONNX session; `--threads` controls that process's ONNX Runtime intra-op threads.
+
 ## API
 
-Every text dataset serves `GET /api/<dataset>/search`, `/analytics` and `/stats`; text search supports `mode=all|any|phrase`. Hacker News supports title/text fields, story/comment types, author, year and score/recent sorting; Amazon reviews support headline/body, exact category, rating, verified-purchase, year and helpful/recent filters; arXiv supports title/abstract, archive-category prefixes and first-submission year; Reddit supports subreddit, author, year and score/recent sorting. Reddit body text is preserved in the pre-tokenized form used by its Hugging Face mirror. Gutenberg indexes whole books and searches text, title or author; Loghub searches 19 archive systems and retains unmatched lines with fallback message text (formats without a year have null timestamps). The LAION image API serves `/api/laion/images` (`q`, `mode=semantic|caption`, `similar=<id>`, `limit`), `/api/laion/analytics` and `/api/laion/stats`. Semantic image search uses CLIP text embeddings and the vector index; caption mode requires all query tokens and sorts by LAION's caption-image similarity. Unsafe text queries are blocked. Every search response includes the SQL sent to RawTree and its statistics, which the UI exposes in the query panel.
+Every text dataset serves `GET /api/<dataset>/search`, `/analytics` and `/stats`; text search supports `mode=all|any|phrase`. Wikipedia and Stack Overflow also support `mode=semantic`, which embeds the query with MiniLM and ranks by cosine similarity using the 384-dimensional HNSW index; it ignores the text filters and returns HTTP 503 until the vector table exists. Hacker News supports title/text fields, story/comment types, author, year and score/recent sorting; Amazon reviews support headline/body, exact category, rating, verified-purchase, year and helpful/recent filters; arXiv supports title/abstract, archive-category prefixes and first-submission year; Reddit supports subreddit, author, year and score/recent sorting. Reddit body text is preserved in the pre-tokenized form used by its Hugging Face mirror. Gutenberg indexes whole books and searches text, title or author; Loghub searches 19 archive systems and retains unmatched lines with fallback message text (formats without a year have null timestamps). The LAION image API serves `/api/laion/images` (`q`, `mode=semantic|caption`, `similar=<id>`, `limit`), `/api/laion/analytics` and `/api/laion/stats`. Semantic image search uses CLIP text embeddings and the vector index; caption mode requires all query tokens and sorts by LAION's caption-image similarity. Unsafe text queries are blocked. Every search response includes the SQL sent to RawTree and its statistics, which the UI exposes in the query panel.
+
+### Embedding throughput
+
+Throughput was measured on the 8-vCPU build VM using 1,024 real rows from each source Parquet file. Each child process was initialized and warmed before two timed passes over the 1,024 texts; rates below are the mean throughput across those passes.
+
+| Workers × threads | Wikipedia (texts/s) | Stack Overflow (texts/s) |
+|---:|---:|---:|
+| 1 × 8 | 85.8 | 57.8 |
+| 2 × 4 | 99.8 | 93.7 |
+| 4 × 2 | 124.6 | 123.3 |
+| 8 × 1 | 127.7 | 112.2 |
+
+Wikipedia was fastest at 8 × 1, and Stack Overflow at 4 × 2. The balanced default follows the best overall split, 4 × 2: two threads per child and `max(1, floor((os.availableParallelism() - 2) / 2))` workers. That gives 3 × 2 on this 8-vCPU VM and 7 × 2 on the 16-vCPU production target, reserving two CPUs for the web app and system.
 
 ## Run locally
 

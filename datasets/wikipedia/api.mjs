@@ -1,6 +1,7 @@
 // Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
+import { semanticQuery } from '../../lib/text_embed.mjs';
 import { literal, query } from '../../lib/rawtree.mjs';
-import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const ARTICLES = 'wikipedia_articles';
 const PAGEVIEWS = 'wikipedia_pageviews';
@@ -11,6 +12,7 @@ const FIELDS = ['text', 'title', 'both'];
 const WIKIS = `domain_code::String IN ('en', 'en.m')`;
 const PAGE_TITLE = `page_title::String`;
 const ARTICLE_PAGE_TITLE = `replaceAll(title::String, ' ', '_')`;
+const VECTORS = 'wikipedia_vectors';
 
 function buildFilter(params)
 {
@@ -28,6 +30,9 @@ function buildFilter(params)
 
 async function search(params)
 {
+    if (params.get('mode') === 'semantic')
+        return semanticSearch(params);
+
     const { tokens, where, matches } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
     const countSql = `SELECT count() AS matches
@@ -73,6 +78,58 @@ LIMIT ${limit}`;
         hits: rows,
         timeline: { title: 'Hourly pageviews of matching articles', kind: 'stack', result: timeline },
         queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }],
+    };
+}
+
+async function semanticSearch(params)
+{
+    const { tokens } = parseSearch(params);
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const hits = await semanticQuery(VECTORS, 'id::String AS id, title::String AS title, url::String AS url', params.get('q'), limit);
+
+    const titles = hits.data.map((row) => row.title);
+    const snippetsSql = `SELECT title::String AS title, substringUTF8(text::String, 1, 300) AS snippet
+FROM ${ARTICLES}
+WHERE ${titles.length ? `title::String IN (${titles.map(literal).join(', ')})` : '0'}`;
+    const pageTitles = titles.map((title) => title.replaceAll(' ', '_'));
+    const pageTitleList = pageTitles.length ? pageTitles.map(literal).join(', ') : "''";
+    const viewsSql = `SELECT ${PAGE_TITLE} AS page_title, sum(count_views::Int64) AS views
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${pageTitleList})
+GROUP BY page_title
+ORDER BY views DESC`;
+    const timelineSql = `SELECT hour::DateTime AS bucket, if(domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(count_views::Int64) AS value
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${pageTitleList})
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    const [snippets, views, timeline] = await Promise.all([
+        query(snippetsSql),
+        titles.length ? query(viewsSql) : Promise.resolve({ data: [], sql: viewsSql }),
+        titles.length ? query(timelineSql) : Promise.resolve({ data: [], sql: timelineSql }),
+    ]);
+    const snippetsByTitle = new Map(snippets.data.map((row) => [row.title, row.snippet]));
+    const viewsByTitle = new Map(views.data.map((row) => [row.page_title.replaceAll('_', ' '), Number(row.views)]));
+    return {
+        tokens,
+        total: hits.data.length,
+        hits: hits.data.map((row) =>
+        {
+            const pageviews = viewsByTitle.get(row.title) ?? 0;
+            return {
+                title: row.title,
+                url: row.url,
+                snippet: snippetsByTitle.get(row.title) ?? '',
+                meta: [`${Number(row.score).toFixed(3)} similarity`, `${pageviews.toLocaleString('en-US')} views`],
+            };
+        }),
+        timeline: { title: 'Hourly pageviews of matching articles', kind: 'stack', result: timeline },
+        queries: [
+            { title: 'Semantic article matches', ...hits },
+            { title: 'Article snippets', ...snippets },
+            { title: 'Matching pageviews', ...views },
+            { title: 'Hourly pageviews', ...timeline },
+        ],
     };
 }
 
