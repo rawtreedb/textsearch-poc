@@ -27,6 +27,20 @@ const TYPES = {
 // HTML/JS/CSS revalidate on every load so a deploy never mixes old pages with new scripts.
 const CACHE = { 'application/json': 'no-store', 'image/svg+xml': 'public, max-age=86400', 'image/png': 'public, max-age=86400', 'image/x-icon': 'public, max-age=86400' };
 
+// Dataset stats are static but expensive (Wikipedia's sums 19 GB of text), so compute them once per hour.
+const STATS_TTL_MS = 60 * 60 * 1000;
+const statsCache = new Map();
+function cachedStats(id, handler)
+{
+    const hit = statsCache.get(id);
+    if (hit && Date.now() - hit.at < STATS_TTL_MS)
+        return hit.value;
+    const value = handler(new URLSearchParams());
+    statsCache.set(id, { at: Date.now(), value });
+    value.catch(() => statsCache.delete(id));
+    return value;
+}
+
 function send(res, status, body, type = 'application/json')
 {
     res.writeHead(status, { 'content-type': type, 'cache-control': CACHE[type] ?? 'no-cache' });
@@ -65,6 +79,8 @@ createServer(async (req, res) =>
             const handler = datasets.get(parts[1])?.routes?.[parts[2]];
             if (!handler || req.method !== 'GET')
                 return send(res, 404, { error: 'not found' });
+            if (parts[2] === 'stats')
+                return send(res, 200, await cachedStats(parts[1], handler));
             return send(res, 200, await handler(url.searchParams));
         }
         if (parts.length === 0)

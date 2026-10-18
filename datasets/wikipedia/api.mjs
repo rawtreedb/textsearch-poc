@@ -30,7 +30,7 @@ async function search(params)
 {
     const { tokens, where, matches } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const countSql = `SELECT count() AS matches, sum(length(__raw_data.text::String)) AS bytes
+    const countSql = `SELECT count() AS matches
 FROM ${ARTICLES}
 WHERE ${where}`;
     const topSql = `WITH ${matches}
