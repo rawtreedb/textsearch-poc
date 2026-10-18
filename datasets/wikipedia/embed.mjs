@@ -38,7 +38,7 @@ const files = await parquetFiles();
 await loadParquetEmbeddings({
     table: opts.table,
     sortingKey: 'id',
-    files: await Promise.all(files.map(async (key) => ({ key, url: await resolveRedirect(key) }))),
+    files: files.map((key) => ({ key, url: () => resolveRedirect(key) })),
     columns: ['id', 'title', 'url', 'text'],
     isIncluded: () => true,
     textFor: (row) => `${row.title ?? ''}\n${row.text ?? ''}`,
