@@ -1,24 +1,69 @@
-// Shared search + analytics UI. A dataset page sets `window.APP = { api, filters, examples }` before loading this script.
+// Shared search + analytics UI (styled after bluesky-fulltext-poc). A dataset page sets `window.APP` before loading this script:
+// { id, api, title, eyebrow, lead, placeholder, stats: [[key, label, kind?]], filters, examples }
 // filters: [{ name, label, options: [[value, label], ...] } | { name, label, placeholder, type }]
-const { api, filters = [], examples = [] } = window.APP;
+const APP = window.APP;
+const { api, filters = [], examples = [] } = APP;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const num = (n) => (typeof n === 'number' || /^-?\d+(\.\d+)?$/.test(String(n)) ? Number(n).toLocaleString('en-US') : esc(n));
-const COLORS = ['#0c47f3', '#02b078', '#f59e0b', '#e11d48', '#7c3aed', '#0891b2', '#a8a29e'];
+const compact = (n) => Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n));
+const bytes = (n) => { const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; n = Number(n); while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; } return `${n.toFixed(i ? 1 : 0)} ${units[i]}`; };
+const COLORS = ['#0c47f3', '#02b078', '#ee9a48', '#e11d48', '#7c3aed', '#0891b2', '#a8a29e'];
+const DATASETS = [['wikipedia', 'Wikipedia'], ['stackoverflow', 'Stack Overflow']];
+const REPO = 'https://github.com/rawtreedb/textsearch-poc';
 let tab = 'results';
+let queries = [];
+let queryIndex = 0;
+
+function renderShell()
+{
+    const nav = DATASETS.map(([id, label]) => `<a class="pill${id === APP.id ? ' active' : ''}" href="/${id}/">${label}</a>`).join('');
+    document.body.innerHTML = `
+<header><div class="wrap">
+  <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>RawTree</a>
+  <nav>${nav}<a class="pill" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a></nav>
+</div></header>
+<section class="hero wrap">
+  <div class="eyebrow"><span class="dot"></span>${esc(APP.eyebrow)}</div>
+  <h1>${esc(APP.title)}</h1>
+  <p class="lead">${esc(APP.lead)}</p>
+  <div class="stats" id="stats">${(APP.stats ?? []).map(([, label]) => `<div class="stat"><div class="v">–</div><div class="k">${esc(label)}</div></div>`).join('')}</div>
+</section>
+<section class="wrap">
+  <form id="f"></form>
+  <div class="examples" id="examples"></div>
+  <div class="search-tabs" role="tablist" aria-label="View">
+    <button type="button" id="tab-results">Results</button><button type="button" id="tab-analytics">Analytics</button>
+  </div>
+</section>
+<main class="wrap" id="main">
+  <section>
+    <div class="meta" id="meta"></div>
+    <details class="spoiler" id="under">
+      <summary><span class="chev"></span>Show RawTree queries</summary>
+      <div class="code under">
+        <div class="bar"><i></i><i></i><i></i><div class="tabs" id="qtabs"></div><span class="qstat" id="qstat"></span><button type="button" class="act" id="copy">Copy</button></div>
+        <pre id="sql"></pre>
+      </div>
+    </details>
+    <div id="hits"></div>
+  </section>
+  <aside id="aside"></aside>
+</main>
+<footer><div class="wrap"><span>Data: ${esc(APP.source)}</span><span>Storage &amp; search: <a href="https://rawtree.com" target="_blank" rel="noopener">RawTree</a></span><span>Source: <a href="${REPO}" target="_blank" rel="noopener">github.com/rawtreedb/textsearch-poc</a></span></div></footer>`;
+}
 
 function renderForm()
 {
-    const controls = [
-        `<input type="search" name="q" placeholder="Search…" required autofocus>`,
-        `<select name="mode"><option value="all">all words</option><option value="any">any word</option><option value="phrase">phrase</option></select>`,
+    $('f').innerHTML = [
+        `<input type="search" name="q" placeholder="${esc(APP.placeholder ?? 'Search…')}" required autofocus>`,
+        `<select name="mode" title="Match mode"><option value="all">All words</option><option value="any">Any word</option><option value="phrase">Exact phrase</option></select>`,
         ...filters.map((f) => f.options
             ? `<select name="${f.name}" title="${esc(f.label)}">${f.options.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`
             : `<input class="small" name="${f.name}" type="${f.type ?? 'text'}" placeholder="${esc(f.placeholder ?? f.label)}" title="${esc(f.label)}">`),
-        `<button>Search</button>`,
-    ];
-    $('form').innerHTML = controls.join('');
-    $('examples').innerHTML = examples.length ? `Try:${examples.map((e) => `<a data-q="${esc(new URLSearchParams(e).toString())}">${esc(e.q)}${e.mode === 'phrase' ? ' (phrase)' : ''}</a>`).join('')}` : '';
+        `<button class="pill primary">Search</button>`,
+    ].join('');
+    $('examples').innerHTML = examples.length ? `Try${examples.map((e) => `<a data-q="${esc(new URLSearchParams(e).toString())}">${esc(e.mode === 'phrase' ? `"${e.q}"` : e.q)}</a>`).join('')}` : '';
     $('examples').onclick = (event) =>
     {
         const q = event.target.dataset?.q;
@@ -27,16 +72,17 @@ function renderForm()
         readState(new URLSearchParams(q));
         run(true);
     };
-    $('form').onsubmit = (event) => { event.preventDefault(); run(true); };
+    $('f').onsubmit = (event) => { event.preventDefault(); run(true); };
     for (const name of ['results', 'analytics'])
         $(`tab-${name}`).onclick = () => { tab = name; renderTabs(); run(true); };
+    $('copy').onclick = () => navigator.clipboard?.writeText(queries[queryIndex]?.sql ?? '');
 }
 
-const params = () => new URLSearchParams([...new FormData($('form'))].filter(([, v]) => v !== ''));
+const params = () => new URLSearchParams([...new FormData($('f'))].filter(([, v]) => v !== ''));
 
 function readState(search)
 {
-    for (const element of $('form').elements)
+    for (const element of $('f').elements)
         if (element.name)
             element.value = search.get(element.name) ?? (element.tagName === 'SELECT' ? element.options[0].value : '');
     if (search.get('tab'))
@@ -48,6 +94,7 @@ function renderTabs()
 {
     for (const name of ['results', 'analytics'])
         $(`tab-${name}`).classList.toggle('active', tab === name);
+    document.body.classList.toggle('analytics-mode', tab === 'analytics');
 }
 
 function highlight(text, tokens)
@@ -58,20 +105,44 @@ function highlight(text, tokens)
     return html;
 }
 
+const KEYWORDS = /^(SELECT|FROM|WHERE|AND|OR|NOT|IN|AS|BY|GROUP|ORDER|LIMIT|DESC|ASC|WITH|JOIN|LEFT|INNER|ON|USING|UNION|ALL|DISTINCT|CASE|WHEN|THEN|ELSE|END|IS|NULL|BETWEEN|HAVING|SETTINGS|FORMAT|ARRAY|INTERVAL)$/i;
+function highlightSql(sql)
+{
+    return String(sql ?? '').replace(/('(?:[^'\\]|\\.)*')|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)(\s*\()?|[^'A-Za-z0-9_]+/g, (m, str, n, word, call) =>
+        str ? `<span class="str">${esc(str)}</span>`
+        : n ? `<span class="num">${n}</span>`
+        : word && call ? `<span class="fn">${esc(word)}</span>${esc(call)}`
+        : word && KEYWORDS.test(word) ? `<span class="kw">${word}</span>`
+        : esc(m));
+}
+
 function stats(result)
 {
     const s = result?.statistics;
-    return s ? `${(s.elapsed * 1000).toFixed(0)} ms · ${num(s.rows_read)} rows · ${(s.bytes_read / 1e6).toFixed(1)} MB read` : '';
+    return s ? `<b>${(s.elapsed * 1000).toFixed(0)} ms</b> · ${compact(s.rows_read)} rows · ${bytes(s.bytes_read)} read` : '';
 }
 
-const queryDetails = (result, title = 'SQL sent to RawTree') =>
-    `<details class="query"><summary>${esc(title)} <span class="stats">${stats(result)}</span></summary><pre class="sql">${esc(result?.sql ?? '')}</pre></details>`;
+function renderQueries(list)
+{
+    queries = list;
+    queryIndex = Math.min(queryIndex, list.length - 1);
+    $('qtabs').innerHTML = list.map((q, i) => `<button type="button" data-i="${i}" class="${i === queryIndex ? 'on' : ''}">${esc(q.title ?? `Query ${i + 1}`)}</button>`).join('');
+    $('qtabs').onclick = (event) =>
+    {
+        if (event.target.dataset.i === undefined)
+            return;
+        queryIndex = Number(event.target.dataset.i);
+        renderQueries(queries);
+    };
+    $('qstat').innerHTML = stats(list[queryIndex]);
+    $('sql').innerHTML = highlightSql(list[queryIndex]?.sql);
+}
 
 // rows: [{ bucket, series, value }] -> stacked columns.
 function stackChart(rows)
 {
     if (!rows?.length)
-        return '<p class="muted">No data.</p>';
+        return '<p class="note">No data.</p>';
     const buckets = [...new Set(rows.map((r) => r.bucket))].sort();
     const totals = new Map();
     for (const r of rows)
@@ -91,7 +162,7 @@ function stackChart(rows)
         {
             const h = Number(r.value) / max * 195;
             y -= h;
-            bars += `<rect x="${(i * w).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(w - 0.5, 0.5).toFixed(2)}" height="${h.toFixed(2)}" fill="${color.get(r.series)}"><title>${esc(b)} · ${esc(r.series)}: ${num(r.value)}</title></rect>`;
+            bars += `<rect x="${(i * w).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(w - 1, 0.5).toFixed(2)}" height="${h.toFixed(2)}" fill="${color.get(r.series)}"><title>${esc(b)} · ${esc(r.series)}: ${num(r.value)}</title></rect>`;
         }
     });
     return `<svg class="stack" viewBox="0 0 600 200" preserveAspectRatio="none">${bars}</svg>
@@ -103,20 +174,29 @@ function stackChart(rows)
 function barChart(rows)
 {
     if (!rows?.length)
-        return '<p class="muted">No data.</p>';
+        return '<p class="note">No data.</p>';
     const max = Math.max(...rows.map((r) => Number(r.value)), 1);
-    return rows.map((r) => `<div class="bar"><span title="${esc(r.label)}">${esc(r.label)}</span><div><div class="fill" style="width:${Number(r.value) / max * 100}%"></div></div><b>${num(r.value)}</b></div>`).join('');
+    return rows.map((r) => `<div class="hbar"><span title="${esc(r.label)}">${esc(r.label)}</span><div class="track"><i style="width:${Number(r.value) / max * 100}%"></i></div><span class="n">${num(r.value)}</span></div>`).join('');
 }
 
-const kvTable = (row) => row ? `<table class="kv">${Object.entries(row).map(([k, v]) => `<tr><td>${esc(k.replaceAll('_', ' '))}</td><td>${num(v)}</td></tr>`).join('')}</table>` : '<p class="muted">No data.</p>';
+const kpis = (row) => row
+    ? `<div class="kpis">${Object.entries(row).map(([k, v]) => `<div class="kpi"><div class="v">${num(v)}</div><div class="k">${esc(k.replaceAll('_', ' '))}</div></div>`).join('')}</div>`
+    : '<p class="note">No data.</p>';
 
-function renderPanel(p)
+function panelBody(p)
 {
-    const body = p.error ? `<p class="error">${esc(p.error)}</p>`
+    return p.error ? `<p class="error">${esc(p.error)}</p>`
         : p.kind === 'stack' ? stackChart(p.result.data)
         : p.kind === 'bars' ? barChart(p.result.data)
-        : kvTable(p.result.data[0]);
-    return `<div class="card${p.wide ? ' wide' : ''}"><h3>${esc(p.title)}</h3>${body}${p.result ? queryDetails(p.result, 'SQL') : ''}</div>`;
+        : kpis(p.result.data[0]);
+}
+
+function renderPanel(p, i)
+{
+    const sql = p.result
+        ? `<div class="code under panel-sql" id="psql-${i}"><div class="bar"><i></i><i></i><i></i><span class="qstat">${stats(p.result)}</span></div><pre>${highlightSql(p.result.sql)}</pre></div>`
+        : '';
+    return `<div class="card${p.wide ? ' wide' : ''}"><h3>${esc(p.title)}${p.result ? `<button type="button" class="sqlbtn" data-p="${i}">SQL</button>` : ''}</h3>${panelBody(p)}${sql}</div>`;
 }
 
 async function fetchJson(path)
@@ -127,6 +207,8 @@ async function fetchJson(path)
         throw new Error(body.error ?? `HTTP ${response.status}`);
     return body;
 }
+
+const seconds = (started) => `${((performance.now() - started) / 1000).toFixed(2)} s`;
 
 let generation = 0;
 async function run(push = false)
@@ -140,8 +222,9 @@ async function run(push = false)
     if (push)
         history.pushState(null, '', `?${url}`);
     const current = ++generation;
-    $('summary').textContent = 'Searching…';
-    $('output').innerHTML = '';
+    $('meta').innerHTML = '<span>Searching…</span>';
+    $('hits').innerHTML = '';
+    $('aside').innerHTML = '';
     const started = performance.now();
     try
     {
@@ -150,33 +233,39 @@ async function run(push = false)
             const r = await fetchJson(`${api}/analytics?${search}`);
             if (current !== generation)
                 return;
-            $('summary').textContent = `Analytics in ${((performance.now() - started) / 1000).toFixed(2)} s`;
-            $('output').innerHTML = `<div class="panels">${r.panels.map(renderPanel).join('')}</div>`;
+            $('meta').innerHTML = `<span>Analytics in <b>${seconds(started)}</b></span><span><b>${r.panels.length}</b> queries</span>`;
+            $('hits').innerHTML = `<div class="analytics">${r.panels.map(renderPanel).join('')}</div>`;
+            $('hits').onclick = (event) => event.target.dataset.p !== undefined && $(`psql-${event.target.dataset.p}`).classList.toggle('open');
             return;
         }
         const r = await fetchJson(`${api}/search?${search}`);
         if (current !== generation)
             return;
-        $('summary').textContent = `${num(r.total)} matches · showing ${r.hits.length} · ${((performance.now() - started) / 1000).toFixed(2)} s`;
-        const hits = r.hits.map((h) => `<div class="hit">
+        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${r.hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
+        renderQueries(r.queries);
+        $('hits').innerHTML = r.hits.map((h) => `<div class="hit">
 <a class="title" href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>
-<div class="snippet">…${highlight(h.snippet, r.tokens)}…</div>
-<div class="meta">${h.meta.map((m) => `<span>${esc(m)}</span>`).join('')}${(h.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
-</div>`).join('') || '<p class="muted">No matches.</p>';
-        $('output').innerHTML = `<div class="layout"><div class="card">${hits}</div><div>
-${renderPanel(r.timeline)}
-<div class="card" style="margin-top:16px"><h3>Queries</h3>${r.queries.map((q) => queryDetails(q, q.title)).join('')}</div>
-</div></div>`;
+<div class="text">…${highlight(h.snippet, r.tokens)}…</div>
+<div class="info">${h.meta.map((m) => `<span>${esc(m)}</span>`).join('')}${(h.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}<a href="${esc(h.url)}" target="_blank" rel="noopener">Open ↗</a></div>
+</div>`).join('') || '<div class="empty">No matches.</div>';
+        const t = r.timeline;
+        $('aside').innerHTML = `<div class="card"><h3>${esc(t.title)}</h3>${panelBody(t)}</div>`;
     }
     catch (error)
     {
         if (current === generation)
-            $('summary').innerHTML = `<span class="error">${esc(error.message)}</span>`;
+            $('meta').innerHTML = `<span class="error">${esc(error.message)}</span>`;
     }
 }
 
+renderShell();
 renderForm();
 readState(new URLSearchParams(location.search));
 window.onpopstate = () => { readState(new URLSearchParams(location.search)); run(); };
-fetchJson(`${api}/stats`).then((s) => { $('stats').innerHTML = kvTable(s); }).catch(() => {});
+fetchJson(`${api}/stats`).then((s) =>
+{
+    const fmt = { bytes, compact, num };
+    $('stats').innerHTML = (APP.stats ?? []).map(([key, label, kind = 'compact']) =>
+        `<div class="stat"><div class="v">${s[key] == null ? '–' : fmt[kind](s[key])}</div><div class="k">${esc(label)}</div></div>`).join('');
+}).catch(() => {});
 run();

@@ -4,22 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wikipedia search · RawTree</title>
+<link rel="icon" href="/common/favicon.ico" sizes="48x48">
+<link rel="icon" href="/common/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/common/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/common/style.css">
 </head>
 <body>
-<header><div class="wrap"><a class="brand" href="/">RawTree text search</a><nav><a class="pill active" href="/wikipedia/">Wikipedia</a><a class="pill" href="/stackoverflow/">Stack Overflow</a></nav></div></header>
-<main class="wrap">
-  <h1>Search English Wikipedia</h1>
-  <p class="lead">Full-text search over 6.4M English Wikipedia articles (Nov 2023 snapshot) with the RawTree text index. Results are ranked by pageviews from a week of hourly Wikimedia pageview dumps (desktop + mobile).</p>
-  <details class="query"><summary>Dataset</summary><div class="card" id="stats" style="max-width:480px"></div></details>
-  <form class="search" id="form"></form>
-  <div class="examples" id="examples"></div>
-  <div class="tabs"><button class="pill" id="tab-results" type="button">Results</button><button class="pill" id="tab-analytics" type="button">Analytics</button></div>
-  <div class="summary" id="summary"></div>
-  <div id="output"></div>
-</main>
 <script>
 window.APP = {
+  id: 'wikipedia',
+  title: 'Full-text search and pageview analytics over all of English Wikipedia.',
+  eyebrow: 'Static dataset · English Wikipedia',
+  lead: '6.4M articles (Nov 2023 snapshot) stored in RawTree as raw JSON with a text index, joined with a week of hourly Wikimedia pageviews. Results are ranked by views.',
+  placeholder: 'Search articles, e.g. quantum entanglement, "to be or not to be"',
+  source: 'Wikimedia (wikimedia/wikipedia 20231101.en, pageview dumps)',
+  stats: [['articles', 'Articles'], ['text_bytes', 'Article text', 'bytes'], ['pageview_rows', 'Pageview rows']],
   api: '/api/wikipedia',
   filters: [{ name: 'field', label: 'Field', options: [['text', 'article text'], ['title', 'title'], ['both', 'title or text']] }],
   examples: [{ q: 'quantum entanglement' }, { q: 'to be or not to be', mode: 'phrase' }, { q: 'taylor swift' }, { q: 'eiffel', field: 'title' }, { q: 'überlingen' }],
