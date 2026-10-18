@@ -1,8 +1,7 @@
 // Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
-import { embedText } from '../../lib/text_embed.mjs';
-import { vectorLiteral } from '../../lib/vector.mjs';
-import { isMissingTable, literal, query } from '../../lib/rawtree.mjs';
-import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { semanticQuery } from '../../lib/text_embed.mjs';
+import { literal, query } from '../../lib/rawtree.mjs';
+import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const ARTICLES = 'wikipedia_articles';
 const PAGEVIEWS = 'wikipedia_pageviews';
@@ -86,25 +85,7 @@ async function semanticSearch(params)
 {
     const { tokens } = parseSearch(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const vector = await embedText(params.get('q'));
-    const vectorSql = vectorLiteral(vector);
-    const hitsSql = `SELECT id::String AS id, title::String AS title, url::String AS url,
-       1 - cosineDistance(vector::Array(Float32), ${vectorSql}) AS score
-FROM ${VECTORS}
-ORDER BY cosineDistance(vector::Array(Float32), ${vectorSql})
-LIMIT ${limit}`;
-    const displaySql = hitsSql.replaceAll(vectorSql, '[…384 floats]::Array(Float32)');
-    let hits;
-    try
-    {
-        hits = await query(hitsSql, { displaySql });
-    }
-    catch (error)
-    {
-        if (isMissingTable(error))
-            throw new HttpError(503, 'Semantic index is still loading');
-        throw error;
-    }
+    const hits = await semanticQuery(VECTORS, 'id::String AS id, title::String AS title, url::String AS url', params.get('q'), limit);
 
     const titles = hits.data.map((row) => row.title);
     const snippetsSql = `SELECT title::String AS title, substringUTF8(text::String, 1, 300) AS snippet

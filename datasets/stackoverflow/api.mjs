@@ -1,8 +1,7 @@
 // Search, analytics and stats for Stack Overflow posts (`stackoverflow_posts`, questions and answers 2008-2024).
-import { embedText } from '../../lib/text_embed.mjs';
-import { vectorLiteral } from '../../lib/vector.mjs';
-import { isMissingTable, literal, query } from '../../lib/rawtree.mjs';
-import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { semanticQuery } from '../../lib/text_embed.mjs';
+import { literal, query } from '../../lib/rawtree.mjs';
+import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const POSTS = 'stackoverflow_posts';
 const TITLE = 'lowerUTF8(Title::String)';
@@ -104,27 +103,9 @@ async function semanticSearch(params)
 {
     const { tokens } = parseSearch(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const vector = await embedText(params.get('q'));
-    const vectorSql = vectorLiteral(vector);
-    const hitsSql = `SELECT Id::Int64 AS id, Title::String AS title, Tags::String AS tags,
+    const hits = await semanticQuery(VECTORS, `Id::Int64 AS id, Title::String AS title, Tags::String AS tags,
        Score::Int64 AS post_score, ViewCount::Int64 AS views, AnswerCount::Int64 AS answers,
-       CreationDate::DateTime64(3) AS created,
-       1 - cosineDistance(vector::Array(Float32), ${vectorSql}) AS score
-FROM ${VECTORS}
-ORDER BY cosineDistance(vector::Array(Float32), ${vectorSql})
-LIMIT ${limit}`;
-    const displaySql = hitsSql.replaceAll(vectorSql, '[…384 floats]::Array(Float32)');
-    let hits;
-    try
-    {
-        hits = await query(hitsSql, { displaySql });
-    }
-    catch (error)
-    {
-        if (isMissingTable(error))
-            throw new HttpError(503, 'Semantic index is still loading');
-        throw error;
-    }
+       CreationDate::DateTime64(3) AS created`, params.get('q'), limit);
 
     const ids = hits.data.map((row) => Number(row.id)).filter(Number.isSafeInteger);
     const snippetsSql = `SELECT Id::Int64 AS id, substringUTF8(${PLAIN_BODY}, 1, 300) AS snippet

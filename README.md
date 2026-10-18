@@ -64,7 +64,7 @@ ALTER TABLE wikipedia_vectors ADD INDEX vector_idx __raw_data.vector::Array(Floa
 ALTER TABLE stackoverflow_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
 ```
 
-Each loader downloads its original Parquet source into `$DATA_DIR`, reads row groups locally, and removes the file when complete. Completed `file:rowgroup` entries and stable per-batch insert deduplication tokens make runs resumable. Wikipedia accepts `--files N`; Stack Overflow accepts inclusive `--from`/`--to` years. Both support `--limit N`, `--workers W`, `--threads T`, and `--batch N`. Each worker is a Node child process with one MiniLM/ONNX session; `--threads` controls that process's ONNX Runtime intra-op threads.
+Each loader downloads its original Parquet source into `$DATA_DIR`, reads row groups locally, and removes the file when complete. Completed `file:rowgroup` entries and stable per-batch insert deduplication tokens make runs resumable. Wikipedia accepts `--files N`; Stack Overflow accepts inclusive `--from`/`--to` years. Both support `--limit N` (rows embedded in that run), `--workers W`, `--threads T`, and `--batch N`. Each worker is a Node child process with one MiniLM/ONNX session; `--threads` controls that process's ONNX Runtime intra-op threads.
 
 ## API
 

@@ -1,4 +1,3 @@
-import os from 'node:os';
 import { loadParquetEmbeddings } from '../../lib/embed_loader.mjs';
 import { options } from '../../lib/loader.mjs';
 
@@ -8,8 +7,8 @@ const opts = options({
     table: 'stackoverflow_vectors',
     files: 0,
     limit: 0,
-    workers: Math.max(1, Math.floor((os.availableParallelism() - 2) / 2)),
-    threads: Number(process.env.ORT_INTRA_OP_NUM_THREADS) || 2,
+    workers: undefined,
+    threads: undefined,
     batch: 1000,
 });
 const firstYear = Number(opts.from);
@@ -47,7 +46,6 @@ await loadParquetEmbeddings({
     sortingKey: 'Id',
     files,
     columns: ['Id', 'PostTypeId', 'Title', 'Body', 'Tags', 'Score', 'ViewCount', 'AnswerCount', 'CreationDate'],
-    countColumns: ['PostTypeId'],
     isIncluded: (row) => Number(row.PostTypeId) === 1,
     textFor: (row) => `${row.Title ?? ''}\n${plainBody(row.Body)}`,
     recordFor: (row, vector) => ({

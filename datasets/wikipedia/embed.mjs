@@ -1,4 +1,3 @@
-import os from 'node:os';
 import { loadParquetEmbeddings } from '../../lib/embed_loader.mjs';
 import { options } from '../../lib/loader.mjs';
 
@@ -8,8 +7,8 @@ const opts = options({
     table: 'wikipedia_vectors',
     files: 0,
     limit: 0,
-    workers: Math.max(1, Math.floor((os.availableParallelism() - 2) / 2)),
-    threads: Number(process.env.ORT_INTRA_OP_NUM_THREADS) || 2,
+    workers: undefined,
+    threads: undefined,
     batch: 1000,
 });
 const fileLimit = Number(opts.files);
