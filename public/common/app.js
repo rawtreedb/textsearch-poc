@@ -9,19 +9,29 @@ const num = (n) => (typeof n === 'number' || /^-?\d+(\.\d+)?$/.test(String(n)) ?
 const compact = (n) => Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n));
 const bytes = (n) => { const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; n = Number(n); while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; } return `${n.toFixed(i ? 1 : 0)} ${units[i]}`; };
 const COLORS = ['#0c47f3', '#02b078', '#ee9a48', '#e11d48', '#7c3aed', '#0891b2', '#a8a29e'];
-const DATASETS = [['wikipedia', 'Wikipedia'], ['stackoverflow', 'Stack Overflow'], ['laion', 'LAION images']];
+const DEFAULT_DATASETS = [
+    { id: 'wikipedia', title: 'Wikipedia', path: '/wikipedia/' },
+    { id: 'stackoverflow', title: 'Stack Overflow', path: '/stackoverflow/' },
+];
+let datasets = DEFAULT_DATASETS;
 const REPO = 'https://github.com/rawtreedb/textsearch-poc';
 let tab = 'results';
 let queries = [];
 let queryIndex = 0;
 
+function renderNav()
+{
+    const nav = document.querySelector('header nav');
+    const links = datasets.map(({ id, title, path }) => `<a class="pill${id === APP.id ? ' active' : ''}" href="${esc(path)}">${esc(title)}</a>`).join('');
+    nav.innerHTML = `${links}<a class="pill ext" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a>`;
+}
+
 function renderShell()
 {
-    const nav = DATASETS.map(([id, label]) => `<a class="pill${id === APP.id ? ' active' : ''}" href="/${id}/">${label}</a>`).join('');
     document.body.innerHTML = `
 <header><div class="wrap">
   <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>RawTree</a>
-  <nav>${nav}<a class="pill ext" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a></nav>
+  <nav></nav>
 </div></header>
 <section class="hero wrap">
   <div class="eyebrow"><span class="dot"></span>${esc(APP.eyebrow)}</div>
@@ -51,6 +61,7 @@ function renderShell()
   <aside id="aside"></aside>
 </main>
 <footer><div class="wrap"><span>Data: ${esc(APP.source)}</span><span>Storage &amp; search: <a href="https://rawtree.com" target="_blank" rel="noopener">RawTree</a></span><span>Source: <a href="${REPO}" target="_blank" rel="noopener">github.com/rawtreedb/textsearch-poc</a></span></div></footer>`;
+    renderNav();
 }
 
 function renderForm()
@@ -304,6 +315,13 @@ renderShell();
 renderForm();
 readState(new URLSearchParams(location.search));
 window.onpopstate = () => { readState(new URLSearchParams(location.search)); run(); };
+fetchJson('/api/datasets').then((list) =>
+{
+    if (!Array.isArray(list))
+        return;
+    datasets = list;
+    renderNav();
+}).catch(() => {});
 fetchJson(`${api}/stats`).then((s) =>
 {
     const fmt = { bytes, compact, num };

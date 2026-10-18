@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
-const DATASET_IDS = (process.env.DATASETS ?? 'wikipedia,stackoverflow,laion').split(',').map((s) => s.trim()).filter(Boolean);
+const DATASET_IDS = (process.env.DATASETS ?? 'wikipedia,stackoverflow').split(',').map((s) => s.trim()).filter(Boolean);
 
 // Each dataset module default-exports { id, title, description, routes: { name: async (URLSearchParams) => json } }.
 const datasets = new Map();
