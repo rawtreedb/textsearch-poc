@@ -27,8 +27,10 @@ function buildFilter(params)
         conditions.push('verified_purchase::Bool = true');
     const from = intParam(params, 'from', 1995, 1995, 2015);
     const to = intParam(params, 'to', 2015, 1995, 2015);
-    conditions.push(`${REVIEW_DATE} >= toDate('${from}-01-01')`);
-    conditions.push(`${REVIEW_DATE} < toDate('${to + 1}-01-01')`);
+    if (from > 1995)
+        conditions.push(`${REVIEW_DATE} >= toDate('${from}-01-01')`);
+    if (to < 2015)
+        conditions.push(`${REVIEW_DATE} < toDate('${to + 1}-01-01')`);
     return { tokens, where: conditions.join('\n  AND ') };
 }
 
@@ -49,11 +51,13 @@ WHERE ${where}
 ORDER BY ${order}
 LIMIT ${limit}`;
     const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
-    const timelineSql = `SELECT toStartOfQuarter(${REVIEW_DATE}) AS label, count() AS value
+    const timelineSql = `SELECT toStartOfQuarter(${REVIEW_DATE}) AS bucket,
+       if(star_rating::Int64 >= 4, '4-5 stars', if(star_rating::Int64 = 3, '3 stars', '1-2 stars')) AS series,
+       count() AS value
 FROM ${TABLE}
 WHERE ${where}
-GROUP BY label
-ORDER BY label`;
+GROUP BY bucket, series
+ORDER BY bucket, series`;
     const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
     return {
         tokens,
@@ -70,7 +74,7 @@ ORDER BY label`;
                 ...(row.verified ? ['verified purchase'] : []),
             ],
         })),
-        timeline: { title: 'Matching reviews per quarter', kind: 'bars', result: timeline },
+        timeline: { title: 'Matching reviews per quarter by rating', kind: 'stack', result: timeline },
         queries: [{ title: 'Top reviews', ...hits }, { title: 'Matching reviews', ...count }],
     };
 }
@@ -131,7 +135,7 @@ async function stats()
 
 export default {
     id: 'amazon',
-    title: 'Amazon reviews',
+    title: 'Amazon',
     description: 'Search Amazon customer reviews from the 1990s through 2015 by headline, body, rating and product category.',
     routes: { search, analytics, stats },
 };

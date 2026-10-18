@@ -26,8 +26,10 @@ function buildFilter(params)
         conditions.push(`lowerUTF8(${AUTHOR}) = ${literal(author.toLowerCase())}`);
     const from = intParam(params, 'from', 2006, 2006, 2023);
     const to = intParam(params, 'to', 2023, 2006, 2023);
-    conditions.push(`${ITEM_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
-    conditions.push(`${ITEM_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
+    if (from > 2006)
+        conditions.push(`${ITEM_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
+    if (to < 2023)
+        conditions.push(`${ITEM_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
     return { tokens, where: conditions.join('\n  AND ') };
 }
 

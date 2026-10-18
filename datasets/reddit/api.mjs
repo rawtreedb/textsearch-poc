@@ -17,8 +17,10 @@ function buildFilter(params)
         conditions.push(`lowerUTF8(author::String) = ${literal(author.toLowerCase())}`);
     const from = intParam(params, 'from', 2012, 2012, 2016);
     const to = intParam(params, 'to', 2016, 2012, 2016);
-    conditions.push(`${COMMENT_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
-    conditions.push(`${COMMENT_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
+    if (from > 2012)
+        conditions.push(`${COMMENT_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
+    if (to < 2016)
+        conditions.push(`${COMMENT_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
     return { tokens, where: conditions.join('\n  AND ') };
 }
 
@@ -35,11 +37,11 @@ WHERE ${where}
 ORDER BY ${order}
 LIMIT ${limit}`;
     const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
-    const timelineSql = `SELECT toStartOfMonth(${COMMENT_DATE}) AS label, count() AS value
+    const timelineSql = `SELECT toStartOfMonth(${COMMENT_DATE}) AS bucket, 'comments' AS series, count() AS value
 FROM ${TABLE}
 WHERE ${where}
-GROUP BY label
-ORDER BY label`;
+GROUP BY bucket, series
+ORDER BY bucket`;
     const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
     return {
         tokens,
@@ -54,7 +56,7 @@ ORDER BY label`;
                 meta: [`${row.score} score`, String(row.created).slice(0, 10), `${row.controversiality} controversiality`],
             };
         }),
-        timeline: { title: 'Matching comments per month', kind: 'bars', result: timeline },
+        timeline: { title: 'Matching comments per month', kind: 'stack', result: timeline },
         queries: [{ title: 'Top Reddit comments', ...hits }, { title: 'Matching comments', ...count }],
     };
 }
@@ -109,7 +111,7 @@ async function stats()
 
 export default {
     id: 'reddit',
-    title: 'Reddit comments',
+    title: 'Reddit',
     description: 'Search historical Reddit comments by text, subreddit, author, year and score.',
     routes: { search, analytics, stats },
 };

@@ -22,8 +22,10 @@ function buildFilter(params)
         conditions.push(`arrayExists(c -> c = ${literal(category)} OR startsWith(c, concat(${literal(category)}, '.')), splitByChar(' ', categories::String))`);
     const from = intParam(params, 'from', 1986, 1986, 2026);
     const to = intParam(params, 'to', 2026, 1986, 2026);
-    conditions.push(`${FIRST_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
-    conditions.push(`${FIRST_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
+    if (from > 1986)
+        conditions.push(`${FIRST_DATE} >= toDateTime('${from}-01-01 00:00:00')`);
+    if (to < 2026)
+        conditions.push(`${FIRST_DATE} < toDateTime('${to + 1}-01-01 00:00:00')`);
     return { tokens, where: conditions.join('\n  AND ') };
 }
 
@@ -39,11 +41,11 @@ WHERE ${where}
 ORDER BY ${FIRST_DATE} DESC
 LIMIT ${limit}`;
     const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
-    const timelineSql = `SELECT toYear(${FIRST_DATE}) AS label, count() AS value
+    const timelineSql = `SELECT toStartOfYear(${FIRST_DATE}) AS bucket, 'papers' AS series, count() AS value
 FROM ${TABLE}
 WHERE ${where}
-GROUP BY label
-ORDER BY label`;
+GROUP BY bucket, series
+ORDER BY bucket`;
     const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
     return {
         tokens,
@@ -62,7 +64,7 @@ ORDER BY label`;
                 ],
             };
         }),
-        timeline: { title: 'Matching papers by first submission year', kind: 'bars', result: timeline },
+        timeline: { title: 'Matching papers by first submission year', kind: 'stack', result: timeline },
         queries: [{ title: 'Newest matching papers', ...hits }, { title: 'Matching papers', ...count }],
     };
 }
