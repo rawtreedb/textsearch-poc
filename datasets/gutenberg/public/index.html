@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Project Gutenberg search · RawTree</title><link rel="stylesheet" href="/common/style.css"></head>
+<body><script>
+window.APP = {
+  id: 'gutenberg', title: 'Find whole books that contain your words.',
+  eyebrow: 'Static dataset · Project Gutenberg',
+  lead: 'Search 48,000 complete books. Results show which books contain your query, with a passage from the book.',
+  placeholder: 'Search whole books, e.g. sea voyage or Frankenstein',
+  source: 'Project Gutenberg English books on Hugging Face',
+  stats: [['books', 'Books'], ['total_text_chars', 'Text characters']], api: '/api/gutenberg',
+  filters: [
+    { name: 'field', label: 'Field', options: [['text', 'book text'], ['title', 'title'], ['author', 'author']] },
+    { name: 'sort', label: 'Sort', options: [['length', 'longest text'], ['title', 'title']] },
+    { name: 'author', label: 'Author', placeholder: 'author contains' },
+    { name: 'subject', label: 'Subject', placeholder: 'subject contains' },
+    { name: 'bookshelf', label: 'Bookshelf', placeholder: 'bookshelf contains' },
+    { name: 'from', label: 'Added from', type: 'number', placeholder: 'added from year' },
+    { name: 'to', label: 'Added to', type: 'number', placeholder: 'added to year' },
+  ],
+  examples: [{ q: 'sea voyage' }, { q: 'the time machine', field: 'title' }, { q: 'shakespeare', field: 'author' }, { q: 'white whale', mode: 'phrase' }],
+};
+</script><script src="/common/app.js"></script></body></html>

@@ -297,9 +297,9 @@ async function run(push = false)
             return;
         }
         $('hits').innerHTML = hits.map((h) => `<div class="hit">
-<a class="title" href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>
+${h.url ? `<a class="title" href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : `<span class="title">${esc(h.title)}</span>`}
 <div class="text">…${highlight(h.snippet, r.tokens)}…</div>
-<div class="info">${h.meta.map((m) => `<span>${esc(m)}</span>`).join('')}${(h.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}<a href="${esc(h.url)}" target="_blank" rel="noopener">Open ↗</a></div>
+<div class="info">${h.meta.map((m) => `<span>${esc(m)}</span>`).join('')}${(h.tags ?? []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">Open ↗</a>` : ''}</div>
 </div>`).join('') || '<div class="empty">No matches.</div>';
         const t = r.timeline;
         $('aside').innerHTML = t ? `<div class="card"><h3>${esc(t.title)}</h3>${panelBody(t)}</div>` : '';
