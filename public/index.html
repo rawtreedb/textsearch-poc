@@ -3,16 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RawTree text search on static datasets</title>
+<title>Text search on static datasets · RawTree</title>
+<link rel="icon" href="/common/favicon.ico" sizes="48x48">
+<link rel="icon" href="/common/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/common/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/common/style.css">
 </head>
 <body>
-<header><div class="wrap"><a class="brand" href="/">RawTree text search</a></div></header>
-<main class="wrap">
-  <h1>Full-text search and analytics on static long-text datasets</h1>
-  <p class="lead">Each dataset is loaded once into RawTree and searched with the text index (<code>hasAllTokens</code>, <code>hasAnyTokens</code>, <code>hasPhrase</code>). Pick one:</p>
-  <div class="cards" id="datasets"></div>
-</main>
+<header><div class="wrap">
+  <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>RawTree</a>
+  <nav><a class="pill" href="https://github.com/rawtreedb/textsearch-poc" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a></nav>
+</div></header>
+<section class="hero wrap">
+  <div class="eyebrow"><span class="dot"></span>Demo · static long-text datasets</div>
+  <h1>Full-text search and analytics on tens of millions of long documents, stored as raw JSON.</h1>
+  <p class="lead">Each dataset is loaded once into RawTree in its source format and searched with the text index (<code>hasAllTokens</code>, <code>hasAnyTokens</code>, <code>hasPhrase</code>). Pick one:</p>
+</section>
+<main class="wrap"><div class="cards" id="datasets"></div></main>
+<footer><div class="wrap"><span>Storage &amp; search: <a href="https://rawtree.com" target="_blank" rel="noopener">RawTree</a></span><span>Source: <a href="https://github.com/rawtreedb/textsearch-poc" target="_blank" rel="noopener">github.com/rawtreedb/textsearch-poc</a></span></div></footer>
 <script>
 fetch('/api/datasets').then((r) => r.json()).then((list) =>
 {
@@ -27,7 +38,10 @@ fetch('/api/datasets').then((r) => r.json()).then((list) =>
         const p = document.createElement('p');
         p.className = 'muted';
         p.textContent = d.description;
-        a.append(h, p);
+        const go = document.createElement('div');
+        go.className = 'go';
+        go.textContent = 'Open search →';
+        a.append(h, p, go);
         root.append(a);
     }
 });

@@ -4,22 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stack Overflow search · RawTree</title>
+<link rel="icon" href="/common/favicon.ico" sizes="48x48">
+<link rel="icon" href="/common/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/common/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/common/style.css">
 </head>
 <body>
-<header><div class="wrap"><a class="brand" href="/">RawTree text search</a><nav><a class="pill" href="/wikipedia/">Wikipedia</a><a class="pill active" href="/stackoverflow/">Stack Overflow</a></nav></div></header>
-<main class="wrap">
-  <h1>Search Stack Overflow</h1>
-  <p class="lead">Full-text search over about 60M Stack Overflow questions and answers (2008-2024) with the RawTree text index, with tag, score and time analytics.</p>
-  <details class="query"><summary>Dataset</summary><div class="card" id="stats" style="max-width:480px"></div></details>
-  <form class="search" id="form"></form>
-  <div class="examples" id="examples"></div>
-  <div class="tabs"><button class="pill" id="tab-results" type="button">Results</button><button class="pill" id="tab-analytics" type="button">Analytics</button></div>
-  <div class="summary" id="summary"></div>
-  <div id="output"></div>
-</main>
 <script>
 window.APP = {
+  id: 'stackoverflow',
+  title: 'Full-text search and tag analytics over every Stack Overflow post.',
+  eyebrow: 'Static dataset · Stack Overflow 2008–2024',
+  lead: 'About 60M questions and answers stored in RawTree as raw JSON with a text index on titles and HTML bodies, with tag, score and time analytics.',
+  placeholder: 'Search posts, e.g. segmentation fault, "undefined is not a function"',
+  source: 'Stack Exchange data dump (CC BY-SA)',
+  stats: [['posts', 'Posts'], ['questions', 'Questions'], ['answers', 'Answers']],
   api: '/api/stackoverflow',
   filters: [
     { name: 'field', label: 'Field', options: [['both', 'title or body'], ['body', 'body'], ['title', 'title']] },
