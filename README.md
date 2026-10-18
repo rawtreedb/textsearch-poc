@@ -63,12 +63,12 @@ node server.mjs                      # http://localhost:3000
 
 ## Deploy
 
-`docker-compose.yml` runs the app behind Caddy (`DOMAIN=:80` serves plain HTTP until there is a hostname). Every push to `main` runs `.github/workflows/deploy.yml`: `npm run check` and `docker build`, then it installs Docker on the VM if missing, rsyncs the code (keeping the VM's `.env`), runs `docker compose up -d --build` and waits for `/healthz`. PRs only run the check and build.
+`docker-compose.yml` runs the app behind Caddy (`DOMAIN=:80` serves plain HTTP until there is a hostname). Every push to `main` runs `.github/workflows/deploy.yml`: `npm run check` and `docker build`, then it installs Docker on the VM if missing, rsyncs the code, writes the VM's `.env` from repository secrets/variables, runs `docker compose up -d --build` and waits for `/healthz`. PRs only run the check and build.
 
 One-time setup:
 
 1. VM with ports 80/443 open and port 22 reachable from GitHub Actions runners (key-only auth).
-2. On the VM, create `~/textsearch-poc/.env` from `.env.example`.
-3. Add repository secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (private key) and `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <host>`), in the `production` environment.
+2. Add repository (or `production` environment) secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (private key), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <host>`), `RAWTREE_API_KEY` and optionally `RAWTREE_QUERY_API_KEY`.
+3. Optional variables `DOMAIN` (default `:80`) and `RAWTREE_DATABASE` (default `default`).
 
 Loaders run on the VM as detached one-off containers via the "Load dataset" workflow (`.github/workflows/load.yml`), or by hand with `docker compose run -d --rm --name load-x app node datasets/<id>/<loader>.mjs [args]`.
