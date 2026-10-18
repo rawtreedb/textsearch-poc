@@ -1,6 +1,8 @@
 // Search, analytics and stats for Stack Overflow posts (`stackoverflow_posts`, questions and answers 2008-2024).
-import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { embedText } from '../../lib/text_embed.mjs';
+import { vectorLiteral } from '../../lib/vector.mjs';
+import { isMissingTable, literal, query } from '../../lib/rawtree.mjs';
+import { HttpError, intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const POSTS = 'stackoverflow_posts';
 const TITLE = 'lowerUTF8(Title::String)';
@@ -10,6 +12,7 @@ const FIELDS = ['body', 'title', 'both'];
 const CREATED = 'CreationDate::DateTime64(3)';
 const TAGS = `arrayFilter(t -> t != '', splitByChar('|', Tags::String))`;
 const PLAIN_BODY = `replaceRegexpAll(replaceRegexpAll(Body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
+const VECTORS = 'stackoverflow_vectors';
 
 function buildFilter(params)
 {
@@ -38,6 +41,9 @@ const postUrl = (row) => `https://stackoverflow.com/${row.type === 1 ? 'q' : 'a'
 
 async function search(params)
 {
+    if (params.get('mode') === 'semantic')
+        return semanticSearch(params);
+
     const { tokens, where } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
     const sort = params.get('sort') === 'recent' ? `${CREATED} DESC` : 'Score::Int64 DESC';
@@ -91,6 +97,66 @@ WHERE PostTypeId::Int64 = 1 AND Id::Int64 IN (${parentIds.join(', ')})`);
         hits: rows,
         timeline: { title: 'Matching posts per month', kind: 'stack', result: timeline },
         queries: [{ title: 'Top posts', ...hits }, { title: 'Matching posts', ...count }, ...(parents ? [{ title: 'Parent questions', ...parents }] : [])],
+    };
+}
+
+async function semanticSearch(params)
+{
+    const { tokens } = parseSearch(params);
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const vector = await embedText(params.get('q'));
+    const vectorSql = vectorLiteral(vector);
+    const hitsSql = `SELECT Id::Int64 AS id, Title::String AS title, Tags::String AS tags,
+       Score::Int64 AS post_score, ViewCount::Int64 AS views, AnswerCount::Int64 AS answers,
+       CreationDate::DateTime64(3) AS created,
+       1 - cosineDistance(vector::Array(Float32), ${vectorSql}) AS score
+FROM ${VECTORS}
+ORDER BY cosineDistance(vector::Array(Float32), ${vectorSql})
+LIMIT ${limit}`;
+    const displaySql = hitsSql.replaceAll(vectorSql, '[…384 floats]::Array(Float32)');
+    let hits;
+    try
+    {
+        hits = await query(hitsSql, { displaySql });
+    }
+    catch (error)
+    {
+        if (isMissingTable(error))
+            throw new HttpError(503, 'Semantic index is still loading');
+        throw error;
+    }
+
+    const ids = hits.data.map((row) => Number(row.id)).filter(Number.isSafeInteger);
+    const snippetsSql = `SELECT Id::Int64 AS id, substringUTF8(${PLAIN_BODY}, 1, 300) AS snippet
+FROM ${POSTS}
+WHERE ${ids.length ? `Id::Int64 IN (${ids.join(', ')})` : '0'}`;
+    const snippets = ids.length ? await query(snippetsSql) : { data: [], sql: snippetsSql };
+    const snippetsById = new Map(snippets.data.map((row) => [Number(row.id), row.snippet]));
+    return {
+        tokens,
+        total: hits.data.length,
+        hits: hits.data.map((row) =>
+        {
+            const id = Number(row.id);
+            const tags = String(row.tags ?? '').split('|').filter(Boolean);
+            return {
+                title: row.title,
+                url: `https://stackoverflow.com/q/${id}`,
+                snippet: snippetsById.get(id) ?? '',
+                meta: [
+                    `${Number(row.score).toFixed(3)} similarity`,
+                    `${row.post_score} score`,
+                    `${Number(row.views).toLocaleString('en-US')} views`,
+                    `${row.answers} answers`,
+                    String(row.created).slice(0, 10),
+                ],
+                tags,
+            };
+        }),
+        queries: [
+            { title: 'Semantic question matches', ...hits },
+            { title: 'Question snippets', ...snippets },
+        ],
     };
 }
 

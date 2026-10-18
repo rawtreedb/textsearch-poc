@@ -31,7 +31,8 @@ window.APP = {
     { name: 'from', label: 'From year', type: 'number', placeholder: 'from 2008' },
     { name: 'to', label: 'To year', type: 'number', placeholder: 'to 2024' },
   ],
-  examples: [{ q: 'borrow checker' }, { q: 'segmentation fault', tag: 'c' }, { q: 'undefined is not a function', mode: 'phrase' }, { q: 'kubernetes', type: 'questions' }],
+  modes: [['all', 'All words'], ['any', 'Any word'], ['phrase', 'Exact phrase'], ['semantic', 'Semantic']],
+  examples: [{ q: 'borrow checker' }, { q: 'segmentation fault', tag: 'c' }, { q: 'undefined is not a function', mode: 'phrase' }, { q: 'kubernetes', type: 'questions' }, { q: 'how to undo the last git commit', mode: 'semantic' }],
 };
 </script>
 <script src="/common/app.js"></script>
