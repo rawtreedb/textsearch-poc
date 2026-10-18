@@ -46,8 +46,19 @@ jobs:
             sudo usermod -aG docker "$USER"; }'
       - name: Copy code to the VM
         run: rsync -az --delete --exclude .git --exclude .env --exclude node_modules ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+      - name: Write .env on the VM
+        env:
+          DOMAIN: ${{ vars.DOMAIN || ':80' }}
+          RAWTREE_API_KEY: ${{ secrets.RAWTREE_API_KEY }}
+          RAWTREE_QUERY_API_KEY: ${{ secrets.RAWTREE_QUERY_API_KEY }}
+          RAWTREE_DATABASE: ${{ vars.RAWTREE_DATABASE || 'default' }}
+        run: |
+          test -n "$RAWTREE_API_KEY" || { echo 'Set the RAWTREE_API_KEY secret'; exit 1; }
+          printf 'DOMAIN=%s\nRAWTREE_API_KEY=%s\nRAWTREE_QUERY_API_KEY=%s\nRAWTREE_DATABASE=%s\nDATA_DIR=/data\n' \
+            "$DOMAIN" "$RAWTREE_API_KEY" "$RAWTREE_QUERY_API_KEY" "$RAWTREE_DATABASE" |
+            ssh "$DEPLOY_USER@$DEPLOY_HOST" "umask 077 && cat > $DEPLOY_PATH/.env"
       - name: Rebuild and restart
-        run: ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && test -f .env || { echo 'Create ~/$DEPLOY_PATH/.env from .env.example first'; exit 1; } && sudo docker compose up -d --build --remove-orphans && sudo docker image prune -f"
+        run: ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && sudo docker compose up -d --build --remove-orphans && sudo docker image prune -f"
       - name: Health check
         run: |
           for i in $(seq 1 30); do
