@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amazon reviews search · RawTree</title>
+<link rel="icon" href="/common/favicon.ico" sizes="48x48">
+<link rel="icon" href="/common/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/common/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/common/style.css">
+</head>
+<body>
+<script>
+window.APP = {
+  id: 'amazon',
+  title: 'Search Amazon customer reviews.',
+  eyebrow: 'Static dataset · Amazon Reviews',
+  lead: 'Customer reviews from the 1990s through 2015, searchable across review headlines and bodies with product, rating and purchase filters.',
+  placeholder: 'Search reviews, e.g. comfortable running shoes',
+  source: 'Amazon Reviews public Parquet dataset',
+  stats: [['reviews', 'Reviews'], ['avg_rating', 'Average rating']],
+  api: '/api/amazon',
+  filters: [
+    { name: 'field', label: 'Field', options: [['both', 'headline or body'], ['headline', 'headline'], ['body', 'body']] },
+    { name: 'sort', label: 'Sort', options: [['helpful', 'most helpful'], ['recent', 'most recent']] },
+    { name: 'category', label: 'Category', placeholder: 'exact product category' },
+    { name: 'rating', label: 'Rating', options: [['any', 'any rating'], ['5', '5 stars'], ['4', '4 stars'], ['3', '3 stars'], ['2', '2 stars'], ['1', '1 star']] },
+    { name: 'verified', label: 'Purchase', options: [['any', 'any purchase'], ['yes', 'verified only']] },
+    { name: 'from', label: 'From year', type: 'number', placeholder: 'from 1995' },
+    { name: 'to', label: 'To year', type: 'number', placeholder: 'to 2015' },
+  ],
+  examples: [{ q: 'excellent quality' }, { q: 'battery life', mode: 'phrase' }, { q: 'comfortable fit', rating: '5' }, { q: 'durable', verified: 'yes' }],
+};
+</script>
+<script src="/common/app.js"></script>
+</body>
+</html>
