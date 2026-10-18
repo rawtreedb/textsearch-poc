@@ -21,7 +21,7 @@ function renderShell()
     document.body.innerHTML = `
 <header><div class="wrap">
   <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>RawTree</a>
-  <nav>${nav}<a class="pill" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a></nav>
+  <nav>${nav}<a class="pill ext" href="${REPO}" target="_blank" rel="noopener">Download this repo</a><a class="pill primary" href="https://rawtree.com/waitlist" target="_blank" rel="noopener">Request access</a></nav>
 </div></header>
 <section class="hero wrap">
   <div class="eyebrow"><span class="dot"></span>${esc(APP.eyebrow)}</div>
@@ -125,7 +125,7 @@ function stats(result)
 function renderQueries(list)
 {
     queries = list;
-    queryIndex = Math.min(queryIndex, list.length - 1);
+    queryIndex = Math.max(0, Math.min(queryIndex, list.length - 1));
     $('qtabs').innerHTML = list.map((q, i) => `<button type="button" data-i="${i}" class="${i === queryIndex ? 'on' : ''}">${esc(q.title ?? `Query ${i + 1}`)}</button>`).join('');
     $('qtabs').onclick = (event) =>
     {
@@ -225,6 +225,7 @@ async function run(push = false)
     $('meta').innerHTML = '<span>Searching…</span>';
     $('hits').innerHTML = '';
     $('aside').innerHTML = '';
+    renderQueries([]);
     const started = performance.now();
     try
     {
@@ -233,7 +234,7 @@ async function run(push = false)
             const r = await fetchJson(`${api}/analytics?${search}`);
             if (current !== generation)
                 return;
-            $('meta').innerHTML = `<span>Analytics in <b>${seconds(started)}</b></span><span><b>${r.panels.length}</b> queries</span>`;
+            $('meta').innerHTML = `<span>Analytics in <b>${seconds(started)}</b></span><span><b>${r.panels.filter((p) => !p.error).length}</b> of ${r.panels.length} queries ok</span>`;
             $('hits').innerHTML = `<div class="analytics">${r.panels.map(renderPanel).join('')}</div>`;
             $('hits').onclick = (event) => event.target.dataset.p !== undefined && $(`psql-${event.target.dataset.p}`).classList.toggle('open');
             return;
@@ -242,7 +243,7 @@ async function run(push = false)
         if (current !== generation)
             return;
         $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${r.hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
-        renderQueries(r.queries);
+        renderQueries([...r.queries, ...(r.timeline.result ? [{ ...r.timeline.result, title: r.timeline.title }] : [])]);
         $('hits').innerHTML = r.hits.map((h) => `<div class="hit">
 <a class="title" href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>
 <div class="text">…${highlight(h.snippet, r.tokens)}…</div>

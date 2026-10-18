@@ -24,9 +24,12 @@ const TYPES = {
     '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
 };
 
+// HTML/JS/CSS revalidate on every load so a deploy never mixes old pages with new scripts.
+const CACHE = { 'application/json': 'no-store', 'image/svg+xml': 'public, max-age=86400', 'image/png': 'public, max-age=86400', 'image/x-icon': 'public, max-age=86400' };
+
 function send(res, status, body, type = 'application/json')
 {
-    res.writeHead(status, { 'content-type': type, 'cache-control': type === 'application/json' ? 'no-store' : 'public, max-age=300' });
+    res.writeHead(status, { 'content-type': type, 'cache-control': CACHE[type] ?? 'no-cache' });
     res.end(type === 'application/json' ? JSON.stringify(body) : body);
 }
 

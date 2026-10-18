@@ -36,7 +36,9 @@ ALTER TABLE wikipedia_articles ADD INDEX idx_title lowerUTF8(__raw_data.title::S
 ALTER TABLE wikipedia_articles ADD INDEX idx_text lowerUTF8(__raw_data.text::String) TYPE text(tokenizer = splitByNonAlpha);
 ALTER TABLE stackoverflow_posts ADD INDEX idx_title lowerUTF8(__raw_data.Title::String) TYPE text(tokenizer = splitByNonAlpha);
 ALTER TABLE stackoverflow_posts ADD INDEX idx_body lowerUTF8(__raw_data.Body::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE wikipedia_articles MATERIALIZE INDEX idx_title;  -- likewise for the other three
+-- whole-title tokens, so the pageviews `page_title IN matches` join skips granules
+ALTER TABLE wikipedia_pageviews ADD INDEX idx_page_title __raw_data.page_title::String TYPE text(tokenizer = array);
+ALTER TABLE wikipedia_articles MATERIALIZE INDEX idx_title;  -- likewise for the other four
 ```
 
 ## API
