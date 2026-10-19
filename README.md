@@ -33,7 +33,7 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | `hackernews_items` | [Hacker News public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/hackernews/2023-08-18.parquet): `id, deleted, type, by, time, text, dead, parent, url, score, title, ...` | 37,171,166 | `datasets/hackernews/load.mjs` |
 | `amazon_reviews` | [Amazon Reviews Parquet files](https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/): 1990s, 2000s, and 2010-2015 files | All source rows | `datasets/amazon/load.mjs` |
 | `arxiv_papers` | [`librarian-bots/arxiv-metadata-snapshot`](https://huggingface.co/datasets/librarian-bots/arxiv-metadata-snapshot), 11 Parquet files: `id, title, authors, categories, abstract, versions, update_date` | All source rows | `datasets/arxiv/load.mjs` |
-| `reddit_comments` | [`fddemarco/pushshift-reddit-comments`](https://huggingface.co/datasets/fddemarco/pushshift-reddit-comments), monthly Parquet files `RC_2012-01` through `RC_2016-02` | ~1.9B | `datasets/reddit/load.mjs` |
+| `reddit_comments_v2` | [`fddemarco/pushshift-reddit-comments`](https://huggingface.co/datasets/fddemarco/pushshift-reddit-comments), monthly Parquet files `RC_2012-01` through `RC_2016-02` | ~1.58B: every month except 2015-04 and 2015-12 through 2016-02 | `datasets/reddit/load.mjs` |
 | `gutenberg_books` | [`sedthh/gutenberg_english`](https://huggingface.co/datasets/sedthh/gutenberg_english), 37 Parquet files; one row per whole book | 48,284 | `datasets/gutenberg/load.mjs` |
 | `loghub_lines` | [Loghub v1](https://zenodo.org/records/8196385), 19 `.zip`/`.tar.gz` archives; HDFS_v3_TraceBench is excluded because it contains structured traces, not log lines | ~480M log lines from the remaining 18 archives | `datasets/loghub/load.mjs` |
 | `laion_images` | [LAION-400M embeddings](https://deploy.laion.ai/8f83b608504d46bb81708ec86e912220/embeddings/), aligned `metadata/metadata_{N}.parquet` and `img_emb/img_emb_{N}.npy`: public `url`, `caption`, LAION caption-image similarity, original dimensions and normalized 512-d CLIP ViT-B/32 image vector | 2M rows per shard ID range (shard 0 has 1,000,448 rows) | `datasets/laion/load.mjs` |
@@ -74,7 +74,7 @@ ALTER TABLE amazon_reviews ADD INDEX idx_review_headline lowerUTF8(__raw_data.re
 ALTER TABLE amazon_reviews ADD INDEX idx_review_body lowerUTF8(__raw_data.review_body::String) TYPE text(tokenizer = standard);
 ALTER TABLE arxiv_papers ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = standard);
 ALTER TABLE arxiv_papers ADD INDEX idx_abstract lowerUTF8(__raw_data.abstract::String) TYPE text(tokenizer = standard);
-ALTER TABLE reddit_comments ADD INDEX idx_body lowerUTF8(__raw_data.body::String) TYPE text(tokenizer = standard);
+ALTER TABLE reddit_comments_v2 ADD INDEX idx_body lowerUTF8(__raw_data.body::String) TYPE text(tokenizer = standard);
 ALTER TABLE gutenberg_books ADD INDEX idx_text lowerUTF8(__raw_data.TEXT::String) TYPE text(tokenizer = standard);
 ALTER TABLE loghub_lines ADD INDEX idx_message lowerUTF8(__raw_data.message::String) TYPE text(tokenizer = standard);
 ALTER TABLE laion_images ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = standard);
@@ -90,7 +90,7 @@ ALTER TABLE amazon_reviews MATERIALIZE INDEX idx_review_headline;
 ALTER TABLE amazon_reviews MATERIALIZE INDEX idx_review_body;
 ALTER TABLE arxiv_papers MATERIALIZE INDEX idx_title;
 ALTER TABLE arxiv_papers MATERIALIZE INDEX idx_abstract;
-ALTER TABLE reddit_comments MATERIALIZE INDEX idx_body;
+ALTER TABLE reddit_comments_v2 MATERIALIZE INDEX idx_body;
 ALTER TABLE gutenberg_books MATERIALIZE INDEX idx_text;
 ALTER TABLE loghub_lines MATERIALIZE INDEX idx_message;
 ALTER TABLE laion_images MATERIALIZE INDEX idx_caption;

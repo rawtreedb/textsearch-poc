@@ -1,7 +1,7 @@
 import { importFiles } from '../../lib/text_import.mjs';
 import { options } from '../../lib/loader.mjs';
 
-const opts = options({ table: 'reddit_comments', from: '2012-01', to: '2016-02' });
+const opts = options({ table: 'reddit_comments_v2', from: '2012-01', to: '2016-02' });
 const HF = 'https://huggingface.co';
 
 function monthIndex(value)
