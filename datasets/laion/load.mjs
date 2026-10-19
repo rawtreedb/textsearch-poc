@@ -2,7 +2,7 @@
 // Usage: node datasets/laion/load.mjs [--from 0] [--to 0] [--table laion_images] [--batch 2000]
 import { DATA_DIR, doneSet, log, options } from '../../lib/loader.mjs';
 import { clipUnsafe } from '../../lib/clip.mjs';
-import { createTable, describeTable, execute, insert, listTables, literal, query } from '../../lib/rawtree.mjs';
+import { DATABASE, createTable, describeTable, execute, insert, listTables, literal, query } from '../../lib/rawtree.mjs';
 import { isNsfwText } from '../../lib/nsfw_text.mjs';
 import { downloadShard, normalizedHalfVector, openVectors, readMetadata } from './source.mjs';
 
@@ -21,7 +21,7 @@ if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table))
 const done = doneSet(table);
 const EXPECTED_COLUMNS = new Set(['id', 'shard', 'url', 'caption', 'similarity', 'width', 'height', 'license', 'clip_unsafe', 'vector']);
 const INDEXES = [
-    `ALTER TABLE ${table} ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = splitByNonAlpha)`,
+    `ALTER TABLE ${table} ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = standard)`,
     `ALTER TABLE ${table} ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 512)`,
 ];
 
@@ -43,7 +43,7 @@ async function ensureTable()
             throw new Error(`${table} already contains rows but is missing expected fields (${missing.join(', ')}); refusing to load`);
     }
 
-    const { data: indexes } = await query(`SELECT name FROM system.data_skipping_indices WHERE database = ${literal(process.env.RAWTREE_DATABASE ?? 'default')} AND table = ${literal(table)}`);
+    const { data: indexes } = await query(`SELECT name FROM system.data_skipping_indices WHERE database = ${literal(DATABASE)} AND table = ${literal(table)}`);
     const existing = new Set(indexes.map((index) => index.name));
     for (let index = 0; index < INDEXES.length; index++)
     {

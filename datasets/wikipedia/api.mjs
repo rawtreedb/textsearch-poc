@@ -12,7 +12,8 @@ const FIELDS = ['text', 'title', 'both'];
 const WIKIS = `domain_code::String IN ('en', 'en.m')`;
 const PAGE_TITLE = `page_title::String`;
 const ARTICLE_PAGE_TITLE = `replaceAll(title::String, ' ', '_')`;
-const VECTORS = 'wikipedia_vectors';
+// Embeddings were not reloaded into the dataset database and stay in `default`.
+const VECTORS = 'default.wikipedia_vectors';
 
 function buildFilter(params)
 {
