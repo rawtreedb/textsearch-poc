@@ -1,7 +1,6 @@
 // Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
 // Matches are ranked by per-title totals (`wikipedia_title_views`); hourly charts read pageviews only for the top-ranked titles,
 // because a common term matches tens of thousands of titles, which makes the pageviews scan cost most of the table.
-import { semanticQuery } from '../../lib/text_embed.mjs';
 import { literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
@@ -16,9 +15,6 @@ const FIELDS = ['text', 'title', 'both'];
 const WIKIS = `domain_code::String IN ('en', 'en.m')`;
 const PAGE_TITLE = `page_title::String`;
 const ARTICLE_PAGE_TITLE = `replaceAll(title::String, ' ', '_')`;
-// Embeddings were not reloaded into the dataset database and stay in `default`.
-const VECTORS = 'default.wikipedia_vectors';
-
 function buildFilter(params)
 {
     const { tokens, mode } = parseSearch(params);
@@ -30,7 +26,7 @@ function buildFilter(params)
     };
     const where = conditions[field];
     const matches = `matches AS (SELECT ${ARTICLE_PAGE_TITLE} FROM ${ARTICLES} WHERE ${where})`;
-    return { tokens, mode, field, where, matches };
+    return { tokens, where, matches };
 }
 
 const titleList = (titles) => titles.length ? titles.map(literal).join(', ') : "''";
@@ -50,9 +46,6 @@ ORDER BY bucket, series`;
 
 async function search(params)
 {
-    if (params.get('mode') === 'semantic')
-        return semanticSearch(params);
-
     const { tokens, where, matches } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
     const countSql = `SELECT count() AS matches
@@ -89,52 +82,6 @@ LIMIT ${limit}`;
         hits: rows,
         timeline: { title: `Hourly pageviews of the ${chartTitles.length} most viewed matches`, kind: 'stack', result: timeline },
         queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }, { title: 'Hourly pageviews', ...timeline }],
-    };
-}
-
-async function semanticSearch(params)
-{
-    const { tokens } = parseSearch(params);
-    const limit = intParam(params, 'limit', 20, 1, 100);
-    const hits = await semanticQuery(VECTORS, 'id::String AS id, title::String AS title, url::String AS url', params.get('q'), limit);
-
-    const titles = hits.data.map((row) => row.title);
-    const snippetsSql = `SELECT title::String AS title, substringUTF8(text::String, 1, 300) AS snippet
-FROM ${ARTICLES}
-WHERE ${titles.length ? `title::String IN (${titles.map(literal).join(', ')})` : '0'}`;
-    const pageTitles = titles.map((title) => title.replaceAll(' ', '_'));
-    const viewsSql = `SELECT ${PAGE_TITLE} AS page_title, total::Int64 AS views
-FROM ${TITLE_VIEWS}
-WHERE ${PAGE_TITLE} IN (${titleList(pageTitles)})
-ORDER BY views DESC`;
-    const timelineSql = hourlySql(pageTitles);
-    const [snippets, views, timeline] = await Promise.all([
-        query(snippetsSql),
-        titles.length ? query(viewsSql) : Promise.resolve({ data: [], sql: viewsSql }),
-        titles.length ? query(timelineSql) : Promise.resolve({ data: [], sql: timelineSql }),
-    ]);
-    const snippetsByTitle = new Map(snippets.data.map((row) => [row.title, row.snippet]));
-    const viewsByTitle = new Map(views.data.map((row) => [row.page_title.replaceAll('_', ' '), Number(row.views)]));
-    return {
-        tokens,
-        total: hits.data.length,
-        hits: hits.data.map((row) =>
-        {
-            const pageviews = viewsByTitle.get(row.title) ?? 0;
-            return {
-                title: row.title,
-                url: row.url,
-                snippet: snippetsByTitle.get(row.title) ?? '',
-                meta: [`${Number(row.score).toFixed(3)} similarity`, `${pageviews.toLocaleString('en-US')} views`],
-            };
-        }),
-        timeline: { title: 'Hourly pageviews of matching articles', kind: 'stack', result: timeline },
-        queries: [
-            { title: 'Semantic article matches', ...hits },
-            { title: 'Article snippets', ...snippets },
-            { title: 'Matching pageviews', ...views },
-            { title: 'Hourly pageviews', ...timeline },
-        ],
     };
 }
 

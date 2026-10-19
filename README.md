@@ -25,7 +25,6 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | Table | Source | Rows | Loader |
 |---|---|---|---|
 | `wikipedia_articles` | [`wikimedia/wikipedia`](https://huggingface.co/datasets/wikimedia/wikipedia) `20231101.en`, 41 Parquet files (11.6 GB): `id, url, title, text` | 6.4M | `datasets/wikipedia/load.mjs` |
-| `wikipedia_vectors` | The same 41 Parquet files; article title + text embedded with `Xenova/all-MiniLM-L6-v2` (384 dimensions) | 6.4M | `datasets/wikipedia/embed.mjs` |
 | `wikipedia_pageviews` | [hourly pageview dumps](https://dumps.wikimedia.org/other/pageviews/), `en` (desktop) and `en.m` (mobile) lines: `domain_code, page_title, count_views, total_response_size, hour` | ~2.1M per hour (~350M per week) | `datasets/wikipedia/load_pageviews.mjs` |
 | `wikipedia_title_views` | per-title totals of `wikipedia_pageviews`: `page_title, desktop, mobile, total`, sorting key `page_title` | ~14M | `datasets/wikipedia/load_title_views.mjs` |
 | `stackoverflow_posts` | [ClickHouse public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2008.parquet), one Parquet file per year 2008-2024 (38 GB): `Id, PostTypeId, ParentId, Title, Body, Tags, Score, ViewCount, CreationDate, ...` | ~60M | `datasets/stackoverflow/load.mjs` |
@@ -42,7 +41,6 @@ The article, Stack Overflow, four text-dataset, and Gutenberg loaders use server
 
 ```bash
 node datasets/wikipedia/load.mjs                      # --langs en --snapshot 20231101 --files N (first N files per language)
-node datasets/wikipedia/embed.mjs                     # --table wikipedia_vectors --files N --limit N --workers W --threads T --batch 1000
 node datasets/wikipedia/load_pageviews.mjs            # --from 2023-10-25 --days 7 --wikis en,en.m --concurrency 3
 node datasets/wikipedia/load_title_views.mjs          # after pageviews; delete the table first to rebuild it
 node datasets/stackoverflow/load.mjs                  # --from 2008 --to 2024
@@ -99,31 +97,30 @@ ALTER TABLE laion_images MATERIALIZE INDEX vector_idx;
 
 Don't add a text index on `wikipedia_pageviews.page_title`: checking the `page_title IN matches` set against it per granule made the pageviews join about 10x slower (10 s vs 1 s).
 
-The vector tables were not reloaded with the text datasets and stay in the `default` database, so the semantic-search APIs read `default.wikipedia_vectors` and `default.stackoverflow_vectors`; run the embedding loaders with `RAWTREE_DATABASE=default`. They create their table with an explicit sorting key and add the vector index before inserting rows:
+The Stack Overflow vector table was not reloaded with the text dataset and stays in the `default` database, so the semantic-search API reads `default.stackoverflow_vectors`; run its loader with `RAWTREE_DATABASE=default`. It creates the table with an explicit sorting key and adds the vector index before inserting rows:
 
 ```sql
-ALTER TABLE wikipedia_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
 ALTER TABLE stackoverflow_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
 ```
 
-Each loader downloads its original Parquet source into `$DATA_DIR`, reads row groups locally, and removes the file when complete. Completed `file:rowgroup` entries and stable per-batch insert deduplication tokens make runs resumable. Wikipedia accepts `--files N`; Stack Overflow accepts inclusive `--from`/`--to` years. Both support `--limit N` (rows embedded in that run), `--workers W`, `--threads T`, and `--batch N`. Each worker is a Node child process with one MiniLM/ONNX session; `--threads` controls that process's ONNX Runtime intra-op threads.
+The Stack Overflow embedding loader downloads its original Parquet source into `$DATA_DIR`, reads row groups locally, and removes the file when complete. Completed `file:rowgroup` entries and stable per-batch insert deduplication tokens make runs resumable. It accepts inclusive `--from`/`--to` years, `--limit N` (rows embedded in that run), `--workers W`, `--threads T`, and `--batch N`. Each worker is a Node child process with one MiniLM/ONNX session; `--threads` controls that process's ONNX Runtime intra-op threads.
 
 ## API
 
-Every text dataset serves `GET /api/<dataset>/search`, `/analytics` and `/stats`; text search supports `mode=all|any|phrase`. Wikipedia and Stack Overflow also support `mode=semantic`, which embeds the query with MiniLM and ranks by cosine similarity using the 384-dimensional HNSW index; it ignores the text filters and returns HTTP 503 until the vector table exists. Hacker News supports title/text fields, story/comment types, author, year and score/recent sorting; Amazon reviews support headline/body, exact category, rating, verified-purchase, year and helpful/recent filters; arXiv supports title/abstract, archive-category prefixes and first-submission year; Reddit supports subreddit, author, year and score/recent sorting. Reddit body text is preserved in the pre-tokenized form used by its Hugging Face mirror. Gutenberg indexes whole books and searches text, title or author; Loghub searches 19 archive systems and retains unmatched lines with fallback message text (formats without a year have null timestamps). The LAION image API serves `/api/laion/images` (`q`, `mode=semantic|caption`, `similar=<id>`, `limit`), `/api/laion/analytics` and `/api/laion/stats`. Semantic image search uses CLIP text embeddings and the vector index; caption mode requires all query tokens and sorts by LAION's caption-image similarity. Unsafe text queries are blocked. Every search response includes the SQL sent to RawTree and its statistics, which the UI exposes in the query panel.
+Every text dataset serves `GET /api/<dataset>/search`, `/analytics` and `/stats`; text search supports `mode=all|any|phrase`. Stack Overflow also supports `mode=semantic`, which embeds the query with MiniLM and ranks by cosine similarity using the 384-dimensional HNSW index; it ignores the text filters and returns HTTP 503 until the vector table exists. Hacker News supports title/text fields, story/comment types, author, year and score/recent sorting; Amazon reviews support headline/body, exact category, rating, verified-purchase, year and helpful/recent filters; arXiv supports title/abstract, archive-category prefixes and first-submission year; Reddit supports subreddit, author, year and score/recent sorting. Reddit body text is preserved in the pre-tokenized form used by its Hugging Face mirror. Gutenberg indexes whole books and searches text, title or author; Loghub searches 19 archive systems and retains unmatched lines with fallback message text (formats without a year have null timestamps). The LAION image API serves `/api/laion/images` (`q`, `mode=semantic|caption`, `similar=<id>`, `limit`), `/api/laion/analytics` and `/api/laion/stats`. Semantic image search uses CLIP text embeddings and the vector index; caption mode requires all query tokens and sorts by LAION's caption-image similarity. Unsafe text queries are blocked. Every search response includes the SQL sent to RawTree and its statistics, which the UI exposes in the query panel.
 
 ### Embedding throughput
 
-Throughput was measured on the 8-vCPU build VM using 1,024 real rows from each source Parquet file. Each child process was initialized and warmed before two timed passes over the 1,024 texts; rates below are the mean throughput across those passes.
+Throughput was measured on the 8-vCPU build VM using 1,024 real rows from the Stack Overflow source Parquet file. Each child process was initialized and warmed before two timed passes over the 1,024 texts; rates below are the mean throughput across those passes.
 
-| Workers × threads | Wikipedia (texts/s) | Stack Overflow (texts/s) |
-|---:|---:|---:|
-| 1 × 8 | 85.8 | 57.8 |
-| 2 × 4 | 99.8 | 93.7 |
-| 4 × 2 | 124.6 | 123.3 |
-| 8 × 1 | 127.7 | 112.2 |
+| Workers × threads | Stack Overflow (texts/s) |
+|---:|---:|
+| 1 × 8 | 57.8 |
+| 2 × 4 | 93.7 |
+| 4 × 2 | 123.3 |
+| 8 × 1 | 112.2 |
 
-Wikipedia was fastest at 8 × 1, and Stack Overflow at 4 × 2. The balanced default follows the best overall split, 4 × 2: two threads per child and `max(1, floor((os.availableParallelism() - 2) / 2))` workers. That gives 3 × 2 on this 8-vCPU VM and 7 × 2 on the 16-vCPU production target, reserving two CPUs for the web app and system.
+Stack Overflow was fastest at 4 × 2. The balanced default uses two threads per child and `max(1, floor((os.availableParallelism() - 2) / 2))` workers. That gives 3 × 2 on this 8-vCPU VM and 7 × 2 on the 16-vCPU production target, reserving two CPUs for the web app and system.
 
 ## Run locally
 
