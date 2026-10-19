@@ -16,8 +16,6 @@ const DEFAULT_DATASETS = [
 let datasets = DEFAULT_DATASETS;
 const REPO = 'https://github.com/rawtreedb/textsearch-poc';
 let tab = 'results';
-let queries = [];
-let queryIndex = 0;
 
 function renderNav()
 {
@@ -50,13 +48,6 @@ function renderShell()
 <main class="wrap" id="main">
   <section>
     <div class="meta" id="meta"></div>
-    <details class="spoiler" id="under">
-      <summary><span class="chev"></span>Show RawTree queries</summary>
-      <div class="code under">
-        <div class="bar"><i></i><i></i><i></i><div class="tabs" id="qtabs"></div><span class="qstat" id="qstat"></span><button type="button" class="act" id="copy">Copy</button></div>
-        <pre id="sql"></pre>
-      </div>
-    </details>
     <div id="hits"></div>
   </section>
   <aside id="aside"></aside>
@@ -96,7 +87,6 @@ function renderForm()
     };
     for (const name of ['results', 'analytics'])
         $(`tab-${name}`).onclick = () => { tab = name; renderTabs(); run(true); };
-    $('copy').onclick = () => navigator.clipboard?.writeText(queries[queryIndex]?.sql ?? '');
 }
 
 const params = () => new URLSearchParams([...new FormData($('f'))].filter(([, v]) => v !== ''));
@@ -142,22 +132,6 @@ function stats(result)
 {
     const s = result?.statistics;
     return s ? `<b>${(s.elapsed * 1000).toFixed(0)} ms</b> · ${compact(s.rows_read)} rows · ${bytes(s.bytes_read)} read` : '';
-}
-
-function renderQueries(list)
-{
-    queries = list;
-    queryIndex = Math.max(0, Math.min(queryIndex, list.length - 1));
-    $('qtabs').innerHTML = list.map((q, i) => `<button type="button" data-i="${i}" class="${i === queryIndex ? 'on' : ''}">${esc(q.title ?? `Query ${i + 1}`)}</button>`).join('');
-    $('qtabs').onclick = (event) =>
-    {
-        if (event.target.dataset.i === undefined)
-            return;
-        queryIndex = Number(event.target.dataset.i);
-        renderQueries(queries);
-    };
-    $('qstat').innerHTML = stats(list[queryIndex]);
-    $('sql').innerHTML = highlightSql(list[queryIndex]?.sql);
 }
 
 // rows: [{ bucket, series, value }] -> stacked columns.
@@ -247,7 +221,6 @@ async function run(push = false)
     $('meta').innerHTML = '<span>Searching…</span>';
     $('hits').innerHTML = '';
     $('aside').innerHTML = '';
-    renderQueries([]);
     const started = performance.now();
     try
     {
@@ -268,13 +241,11 @@ async function run(push = false)
         if (r.blocked)
         {
             $('meta').innerHTML = `<span class="error">This query is blocked by the content-safety filter.</span>`;
-            renderQueries([]);
             $('hits').innerHTML = '<div class="empty">Try a different image description.</div>';
             return;
         }
         const hits = r.hits ?? [];
         $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
-        renderQueries([...(r.queries ?? []), ...(r.timeline?.result ? [{ ...r.timeline.result, title: r.timeline.title }] : [])]);
         if (APP.results === 'images')
         {
             $('hits').innerHTML = `<div class="image-grid">${hits.map((h) => `<article class="image-tile">
