@@ -1,5 +1,5 @@
 import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'arxiv_papers';
 const TITLE = 'lowerUTF8(title::String)';
@@ -40,16 +40,15 @@ FROM ${TABLE}
 WHERE ${where}
 ORDER BY ${FIRST_DATE} DESC
 LIMIT ${limit}`;
-    const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
     const timelineSql = `SELECT toStartOfYear(${FIRST_DATE}) AS bucket, 'papers' AS series, count() AS value
 FROM ${TABLE}
 WHERE ${where}
 GROUP BY bucket, series
 ORDER BY bucket`;
-    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+    const [hits, timeline] = await Promise.all([query(hitsSql), query(timelineSql)]);
     return {
         tokens,
-        total: Number(count.data[0]?.matches ?? 0),
+        total: sumValues(timeline),
         hits: hits.data.map((row) =>
         {
             const authors = String(row.authors ?? '');
@@ -65,7 +64,7 @@ ORDER BY bucket`;
             };
         }),
         timeline: { title: 'Matching papers by first submission year', kind: 'stack', result: timeline },
-        queries: [{ title: 'Newest matching papers', ...hits }, { title: 'Matching papers', ...count }],
+        queries: [{ title: 'Newest matching papers', ...hits }],
     };
 }
 

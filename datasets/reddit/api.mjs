@@ -1,5 +1,5 @@
 import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'reddit_comments';
 const BODY = 'lowerUTF8(body::String)';
@@ -36,16 +36,15 @@ FROM ${TABLE}
 WHERE ${where}
 ORDER BY ${order}
 LIMIT ${limit}`;
-    const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
     const timelineSql = `SELECT toStartOfMonth(${COMMENT_DATE}) AS bucket, 'comments' AS series, count() AS value
 FROM ${TABLE}
 WHERE ${where}
 GROUP BY bucket, series
 ORDER BY bucket`;
-    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+    const [hits, timeline] = await Promise.all([query(hitsSql), query(timelineSql)]);
     return {
         tokens,
-        total: Number(count.data[0]?.matches ?? 0),
+        total: sumValues(timeline),
         hits: hits.data.map((row) =>
         {
             const parentId = String(row.link_id ?? '').replace(/^t3_/, '');
@@ -57,7 +56,7 @@ ORDER BY bucket`;
             };
         }),
         timeline: { title: 'Matching comments per month', kind: 'stack', result: timeline },
-        queries: [{ title: 'Top Reddit comments', ...hits }, { title: 'Matching comments', ...count }],
+        queries: [{ title: 'Top Reddit comments', ...hits }],
     };
 }
 
