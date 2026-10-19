@@ -39,7 +39,7 @@ async function search(params)
         tokens, total: Number(count.data[0]?.matches ?? 0),
         hits: hits.data.map((r) => ({ title: `${r.system}${r.component ? ` · ${r.component}` : ''}${r.level ? ` · ${r.level}` : ''}${r.ts ? ` · ${displayTimestamp(r.ts)}` : ''}`, url: '', snippet: r.snippet, meta: [r.file, `line ${r.line_no}`, r.label && r.label !== '-' ? `alert: ${r.label}` : ''].filter(Boolean) })),
         timeline: { title: 'Matches by month and system', kind: 'stack', result: timeline },
-        queries: [{ title: 'Matching log lines', ...hits }, { title: 'Matching log lines', ...count }, { title: 'Timeline', ...timeline }],
+        queries: [{ title: 'Matching log lines', ...hits }, { title: 'Match count', ...count }, { title: 'Timeline', ...timeline }],
     };
 }
 
