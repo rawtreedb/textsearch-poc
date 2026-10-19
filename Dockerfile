@@ -5,7 +5,6 @@ ENV NODE_ENV=production PORT=8080 MODELS_DIR=/app/models ALLOW_REMOTE_MODELS=fal
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 RUN node --input-type=module -e "import { AutoTokenizer, CLIPTextModelWithProjection, env } from '@huggingface/transformers'; env.cacheDir = '/app/models'; const model = 'Xenova/clip-vit-base-patch32'; await AutoTokenizer.from_pretrained(model); await CLIPTextModelWithProjection.from_pretrained(model, { dtype: 'fp32' });"
-RUN node --input-type=module -e "import { pipeline, env } from '@huggingface/transformers'; env.cacheDir = '/app/models'; await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' });"
 COPY server.mjs ./
 COPY lib ./lib
 COPY datasets ./datasets
