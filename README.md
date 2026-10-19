@@ -77,6 +77,10 @@ ALTER TABLE gutenberg_books ADD INDEX idx_text lowerUTF8(__raw_data.TEXT::String
 ALTER TABLE loghub_lines ADD INDEX idx_message lowerUTF8(__raw_data.message::String) TYPE text(tokenizer = standard);
 ALTER TABLE laion_images ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = standard);
 ALTER TABLE laion_images ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 512);
+-- Parent-question lookup for answers (`Id IN (...)`); the table has no sorting key, so Ids are scattered across granules.
+-- With 20 Ids, bloom_filter(0.01) kept 4001/23009 granules and bloom_filter(0.0001) kept 68/23009.
+ALTER TABLE stackoverflow_posts ADD INDEX idx_id __raw_data.Id::Int64 TYPE bloom_filter(0.0001) GRANULARITY 1;
+ALTER TABLE stackoverflow_posts MATERIALIZE INDEX idx_id;
 ALTER TABLE wikipedia_articles MATERIALIZE INDEX idx_title;  -- likewise for indexes added after loading
 ALTER TABLE hackernews_items MATERIALIZE INDEX idx_title;  -- each loader materializes its initial indexes once
 ALTER TABLE hackernews_items MATERIALIZE INDEX idx_text;
