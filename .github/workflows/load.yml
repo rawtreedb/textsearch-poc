@@ -18,6 +18,8 @@ on:
           - amazon/load.mjs
           - arxiv/load.mjs
           - reddit/load.mjs
+          - gutenberg/load.mjs
+          - loghub/load.mjs
           - laion/load.mjs
       args:
         description: Extra loader arguments (see README), e.g. --limit 100000

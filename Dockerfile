@@ -1,4 +1,5 @@
 FROM node:22-slim
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 MODELS_DIR=/app/models ALLOW_REMOTE_MODELS=false
 COPY package.json package-lock.json ./

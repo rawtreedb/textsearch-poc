@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Loghub search · RawTree</title><link rel="stylesheet" href="/common/style.css"></head>
+<body><script>
+window.APP = {
+  id: 'loghub', title: 'Search system logs.',
+  eyebrow: 'Static dataset · Loghub v1',
+  lead: 'HDFS_v1, HDFS_v2, Hadoop, Spark, Zookeeper, OpenStack, BGL, HPC, Thunderbird, Windows, Linux, Mac, Android_v1, Android_v2, HealthApp, Apache, SSH/OpenSSH and Proxifier logs. HDFS_v3_TraceBench contains structured traces, not log lines, so it is skipped. Some formats omit the year, so those timestamps are null.',
+  placeholder: 'Search log messages, e.g. connection refused',
+  source: 'Loghub v1 · Zenodo · CC-BY-4.0', stats: [['lines', 'Log lines']], api: '/api/loghub',
+  filters: [
+    { name: 'system', label: 'System', options: [['', 'all systems'], ...['HDFS_v1','HDFS_v2','HDFS_v3_TraceBench','Hadoop','Spark','Zookeeper','OpenStack','BGL','HPC','Thunderbird','Windows','Linux','Mac','Android_v1','Android_v2','HealthApp','Apache','SSH','Proxifier'].map((v) => [v, v])] },
+    { name: 'level', label: 'Level', placeholder: 'level' },
+    { name: 'alerts', label: 'Alerts', options: [['', 'all lines'], ['yes', 'alerts only']] },
+    { name: 'sort', label: 'Sort', options: [['recent', 'newest'], ['system', 'system order']] },
+    { name: 'from', label: 'From year', type: 'number', placeholder: 'from year' },
+    { name: 'to', label: 'To year', type: 'number', placeholder: 'to year' },
+  ],
+  examples: [{ q: 'connection refused' }, { q: 'failed to configure', mode: 'phrase' }, { q: 'authentication failure', system: 'SSH' }, { q: 'parity error', system: 'BGL', alerts: 'yes' }],
+};
+</script><script src="/common/app.js"></script></body></html>
