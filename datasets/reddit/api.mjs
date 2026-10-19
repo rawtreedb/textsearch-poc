@@ -1,7 +1,7 @@
 import { literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
-const TABLE = 'reddit_comments';
+const TABLE = 'reddit_comments_v2';
 const BODY = 'lowerUTF8(body::String)';
 const COMMENT_DATE = 'toDateTime(created_utc::Int64)';
 
