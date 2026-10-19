@@ -11,7 +11,8 @@ const FIELDS = ['body', 'title', 'both'];
 const CREATED = 'CreationDate::DateTime64(3)';
 const TAGS = `arrayFilter(t -> t != '', splitByChar('|', Tags::String))`;
 const PLAIN_BODY = `replaceRegexpAll(replaceRegexpAll(Body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
-const VECTORS = 'stackoverflow_vectors';
+// Embeddings were not reloaded into the dataset database and stay in `default`.
+const VECTORS = 'default.stackoverflow_vectors';
 
 function buildFilter(params)
 {

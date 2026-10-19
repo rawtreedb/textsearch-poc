@@ -51,7 +51,7 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN || 'textsearch.rawtree.dev' }}
           RAWTREE_API_KEY: ${{ secrets.RAWTREE_API_KEY }}
           RAWTREE_QUERY_API_KEY: ${{ secrets.RAWTREE_QUERY_API_KEY }}
-          RAWTREE_DATABASE: ${{ vars.RAWTREE_DATABASE || 'default' }}
+          RAWTREE_DATABASE: ${{ vars.RAWTREE_DATABASE || 'textsearch' }}
         run: |
           test -n "$RAWTREE_API_KEY" || { echo 'Set the RAWTREE_API_KEY secret'; exit 1; }
           printf 'DOMAIN=%s\nRAWTREE_API_KEY=%s\nRAWTREE_QUERY_API_KEY=%s\nRAWTREE_DATABASE=%s\nDATA_DIR=/data\n' \

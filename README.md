@@ -59,23 +59,23 @@ The LAION loader keeps successful rows marked `NSFW=UNLIKELY` with HTTPS URLs an
 
 ### Text indexes
 
-Created through the query API before (or after) loading; `MATERIALIZE` builds them for parts inserted before the index existed. The search conditions use the exact same expressions, so the JS tokenizer in `lib/search.mjs` mirrors `splitByNonAlpha` on lowercased text.
+Created through the query API before (or after) loading; `MATERIALIZE` builds them for parts inserted before the index existed. The search conditions use the exact same expressions, so `lib/search.mjs` tokenizes lowercased queries with `Intl.Segmenter`, which follows the same Unicode word boundaries as the `standard` tokenizer.
 
 ```sql
-ALTER TABLE wikipedia_articles ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE wikipedia_articles ADD INDEX idx_text lowerUTF8(__raw_data.text::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE stackoverflow_posts ADD INDEX idx_title lowerUTF8(__raw_data.Title::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE stackoverflow_posts ADD INDEX idx_body lowerUTF8(__raw_data.Body::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE hackernews_items ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE hackernews_items ADD INDEX idx_text lowerUTF8(__raw_data.text::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE amazon_reviews ADD INDEX idx_review_headline lowerUTF8(__raw_data.review_headline::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE amazon_reviews ADD INDEX idx_review_body lowerUTF8(__raw_data.review_body::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE arxiv_papers ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE arxiv_papers ADD INDEX idx_abstract lowerUTF8(__raw_data.abstract::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE reddit_comments ADD INDEX idx_body lowerUTF8(__raw_data.body::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE gutenberg_books ADD INDEX idx_text lowerUTF8(__raw_data.TEXT::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE loghub_lines ADD INDEX idx_message lowerUTF8(__raw_data.message::String) TYPE text(tokenizer = splitByNonAlpha);
-ALTER TABLE laion_images ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = splitByNonAlpha);
+ALTER TABLE wikipedia_articles ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = standard);
+ALTER TABLE wikipedia_articles ADD INDEX idx_text lowerUTF8(__raw_data.text::String) TYPE text(tokenizer = standard);
+ALTER TABLE stackoverflow_posts ADD INDEX idx_title lowerUTF8(__raw_data.Title::String) TYPE text(tokenizer = standard);
+ALTER TABLE stackoverflow_posts ADD INDEX idx_body lowerUTF8(__raw_data.Body::String) TYPE text(tokenizer = standard);
+ALTER TABLE hackernews_items ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = standard);
+ALTER TABLE hackernews_items ADD INDEX idx_text lowerUTF8(__raw_data.text::String) TYPE text(tokenizer = standard);
+ALTER TABLE amazon_reviews ADD INDEX idx_review_headline lowerUTF8(__raw_data.review_headline::String) TYPE text(tokenizer = standard);
+ALTER TABLE amazon_reviews ADD INDEX idx_review_body lowerUTF8(__raw_data.review_body::String) TYPE text(tokenizer = standard);
+ALTER TABLE arxiv_papers ADD INDEX idx_title lowerUTF8(__raw_data.title::String) TYPE text(tokenizer = standard);
+ALTER TABLE arxiv_papers ADD INDEX idx_abstract lowerUTF8(__raw_data.abstract::String) TYPE text(tokenizer = standard);
+ALTER TABLE reddit_comments ADD INDEX idx_body lowerUTF8(__raw_data.body::String) TYPE text(tokenizer = standard);
+ALTER TABLE gutenberg_books ADD INDEX idx_text lowerUTF8(__raw_data.TEXT::String) TYPE text(tokenizer = standard);
+ALTER TABLE loghub_lines ADD INDEX idx_message lowerUTF8(__raw_data.message::String) TYPE text(tokenizer = standard);
+ALTER TABLE laion_images ADD INDEX idx_caption lowerUTF8(__raw_data.caption::String) TYPE text(tokenizer = standard);
 ALTER TABLE laion_images ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 512);
 ALTER TABLE wikipedia_articles MATERIALIZE INDEX idx_title;  -- likewise for indexes added after loading
 ALTER TABLE hackernews_items MATERIALIZE INDEX idx_title;  -- each loader materializes its initial indexes once
@@ -93,7 +93,7 @@ ALTER TABLE laion_images MATERIALIZE INDEX vector_idx;
 
 Don't add a text index on `wikipedia_pageviews.page_title`: checking the `page_title IN matches` set against it per granule made the pageviews join about 10x slower (10 s vs 1 s).
 
-The embedding loaders create their table with an explicit sorting key and add the vector index before inserting rows:
+The vector tables were not reloaded with the text datasets and stay in the `default` database, so the semantic-search APIs read `default.wikipedia_vectors` and `default.stackoverflow_vectors`; run the embedding loaders with `RAWTREE_DATABASE=default`. They create their table with an explicit sorting key and add the vector index before inserting rows:
 
 ```sql
 ALTER TABLE wikipedia_vectors ADD INDEX vector_idx __raw_data.vector::Array(Float32) TYPE vector_similarity('hnsw', 'cosineDistance', 384);
@@ -131,7 +131,7 @@ node server.mjs                      # http://localhost:3000
 |---|---|---|
 | `RAWTREE_API_KEY` | required | Key used by the loaders (and for queries if no query key) |
 | `RAWTREE_QUERY_API_KEY` | `RAWTREE_API_KEY` | Optional `read_only` key for search queries |
-| `RAWTREE_DATABASE` | `default` | Database |
+| `RAWTREE_DATABASE` | `textsearch` | Database |
 | `RAWTREE_API_URL` | `https://api.rawtree.com` | API base URL |
 | `DATASETS` | `wikipedia,stackoverflow,hackernews,amazon,arxiv,reddit,gutenberg,loghub` | Datasets to serve |
 | `DATA_DIR` | `/data` | Loader download and resume-state directory |
@@ -145,6 +145,6 @@ One-time setup:
 
 1. VM with ports 80/443 open and port 22 reachable from GitHub Actions runners (key-only auth).
 2. Add repository (or `production` environment) secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (private key), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <host>`), `RAWTREE_API_KEY` and optionally `RAWTREE_QUERY_API_KEY`.
-3. Optional variables `DOMAIN` (default `textsearch.rawtree.dev`; `:80` serves plain HTTP on the IP) and `RAWTREE_DATABASE` (default `default`).
+3. Optional variables `DOMAIN` (default `textsearch.rawtree.dev`; `:80` serves plain HTTP on the IP) and `RAWTREE_DATABASE` (default `textsearch`).
 
 Loaders run on the VM as detached one-off containers via the "Load dataset" workflow (`.github/workflows/load.yml`), or by hand with `docker compose run -d --rm --name load-x app node datasets/<id>/<loader>.mjs [args]`.
