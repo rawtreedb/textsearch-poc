@@ -69,7 +69,7 @@ FROM ${TABLE} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`;
             snippet: row.snippet,
             meta: [displayAuthors(row.authors), String(row.issued ?? '').slice(0, 4), `${Number(row.text_length).toLocaleString('en-US')} characters`].filter(Boolean),
         })),
-        timeline: null, queries: [{ title: 'Matching books', ...hits }, { title: 'Matching books', ...count }],
+        timeline: null, queries: [{ title: 'Matching books', ...hits }, { title: 'Match count', ...count }],
     };
 }
 
