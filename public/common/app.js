@@ -204,7 +204,14 @@ async function fetchJson(path)
     return body;
 }
 
-const seconds = (started) => `${((performance.now() - started) / 1000).toFixed(2)} s`;
+function rawtreeLine(results, started)
+{
+    const ok = results.filter((q) => q?.statistics);
+    const sum = (key) => ok.reduce((a, q) => a + Number(q.statistics[key] ?? 0), 0);
+    const elapsed = Math.max(0, ...ok.map((q) => Number(q.statistics.elapsed ?? 0)));
+    const rawtree = ok.length ? `<span>RawTree: <b>${(elapsed * 1000).toFixed(0)} ms</b>, read <b>${num(sum('rows_read'))}</b> rows (${bytes(sum('bytes_read'))})</span>` : '';
+    return `${rawtree}<span>round trip ${(performance.now() - started).toFixed(0)} ms</span>`;
+}
 
 let generation = 0;
 async function run(push = false)
@@ -229,7 +236,7 @@ async function run(push = false)
             const r = await fetchJson(`${api}/analytics?${search}`);
             if (current !== generation)
                 return;
-            $('meta').innerHTML = `<span>Analytics in <b>${seconds(started)}</b></span><span><b>${r.panels.filter((p) => !p.error).length}</b> of ${r.panels.length} queries ok</span>`;
+            $('meta').innerHTML = `<span><b>${r.panels.filter((p) => !p.error).length}</b> of ${r.panels.length} queries ok</span>${rawtreeLine(r.panels.map((p) => p.result), started)}`;
             $('hits').innerHTML = `<div class="analytics">${r.panels.map(renderPanel).join('')}</div>`;
             $('hits').onclick = (event) => event.target.dataset.p !== undefined && $(`psql-${event.target.dataset.p}`).classList.toggle('open');
             return;
@@ -245,7 +252,8 @@ async function run(push = false)
             return;
         }
         const hits = r.hits ?? [];
-        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${hits.length}</b></span><span><b>${seconds(started)}</b></span>`;
+        const results = new Map([...(r.queries ?? []), r.timeline?.result].filter(Boolean).map((q) => [q.sql, q]));
+        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${hits.length}</b></span>${rawtreeLine([...results.values()], started)}`;
         if (APP.results === 'images')
         {
             $('hits').innerHTML = `<div class="image-grid">${hits.map((h) => `<article class="image-tile">
