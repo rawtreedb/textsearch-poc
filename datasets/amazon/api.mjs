@@ -1,5 +1,5 @@
 import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'amazon_reviews';
 const HEADLINE = 'lowerUTF8(review_headline::String)';
@@ -50,7 +50,6 @@ FROM ${TABLE}
 WHERE ${where}
 ORDER BY ${order}
 LIMIT ${limit}`;
-    const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
     const timelineSql = `SELECT toStartOfQuarter(${REVIEW_DATE}) AS bucket,
        if(star_rating::Int64 >= 4, '4-5 stars', if(star_rating::Int64 = 3, '3 stars', '1-2 stars')) AS series,
        count() AS value
@@ -58,10 +57,10 @@ FROM ${TABLE}
 WHERE ${where}
 GROUP BY bucket, series
 ORDER BY bucket, series`;
-    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+    const [hits, timeline] = await Promise.all([query(hitsSql), query(timelineSql)]);
     return {
         tokens,
-        total: Number(count.data[0]?.matches ?? 0),
+        total: sumValues(timeline),
         hits: hits.data.map((row) => ({
             title: `${row.product_title} · ${'★'.repeat(Math.max(0, Number(row.rating)))}`,
             url: `https://www.amazon.com/dp/${encodeURIComponent(row.product_id)}`,
@@ -75,7 +74,7 @@ ORDER BY bucket, series`;
             ],
         })),
         timeline: { title: 'Matching reviews per quarter by rating', kind: 'stack', result: timeline },
-        queries: [{ title: 'Top reviews', ...hits }, { title: 'Matching reviews', ...count }],
+        queries: [{ title: 'Top reviews', ...hits }],
     };
 }
 

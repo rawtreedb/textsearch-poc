@@ -1,7 +1,7 @@
 // Search, analytics and stats for Stack Overflow posts (`stackoverflow_posts`, questions and answers 2008-2024).
 import { semanticQuery } from '../../lib/text_embed.mjs';
 import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const POSTS = 'stackoverflow_posts';
 const TITLE = 'lowerUTF8(Title::String)';
@@ -57,15 +57,12 @@ FROM ${POSTS}
 WHERE ${where}
 ORDER BY ${sort}
 LIMIT ${limit}`;
-    const countSql = `SELECT count() AS matches, countIf(PostTypeId::Int64 = 1) AS questions, countIf(PostTypeId::Int64 = 2) AS answers
-FROM ${POSTS}
-WHERE ${where}`;
     const timelineSql = `SELECT toStartOfMonth(${CREATED}) AS bucket, if(PostTypeId::Int64 = 1, 'questions', 'answers') AS series, count() AS value
 FROM ${POSTS}
 WHERE ${where}
 GROUP BY bucket, series
 ORDER BY bucket, series`;
-    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+    const [hits, timeline] = await Promise.all([query(hitsSql), query(timelineSql)]);
 
     // Answers have no title or tags: take them from the parent question.
     const parentIds = [...new Set(hits.data.filter((row) => row.type === 2 && row.parent_id).map((row) => Number(row.parent_id)))];
@@ -93,10 +90,10 @@ WHERE PostTypeId::Int64 = 1 AND Id::Int64 IN (${parentIds.join(', ')})`);
     });
     return {
         tokens,
-        total: Number(count.data[0]?.matches ?? 0),
+        total: sumValues(timeline),
         hits: rows,
         timeline: { title: 'Matching posts per month', kind: 'stack', result: timeline },
-        queries: [{ title: 'Top posts', ...hits }, { title: 'Matching posts', ...count }, ...(parents ? [{ title: 'Parent questions', ...parents }] : [])],
+        queries: [{ title: 'Top posts', ...hits }, ...(parents ? [{ title: 'Parent questions', ...parents }] : [])],
     };
 }
 

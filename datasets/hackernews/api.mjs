@@ -1,5 +1,5 @@
 import { literal, query } from '../../lib/rawtree.mjs';
-import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
+import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'hackernews_items';
 const TITLE = 'lowerUTF8(title::String)';
@@ -45,7 +45,6 @@ FROM ${TABLE}
 WHERE ${where}
 ORDER BY ${order}
 LIMIT ${limit}`;
-    const countSql = `SELECT count() AS matches FROM ${TABLE} WHERE ${where}`;
     const timelineSql = `SELECT toStartOfMonth(${ITEM_DATE}) AS bucket,
        if(type::Int64 = 1, 'stories', if(type::Int64 = 2, 'comments', 'other')) AS series,
        count() AS value
@@ -53,10 +52,10 @@ FROM ${TABLE}
 WHERE ${where}
 GROUP BY bucket, series
 ORDER BY bucket, series`;
-    const [hits, count, timeline] = await Promise.all([query(hitsSql), query(countSql), query(timelineSql)]);
+    const [hits, timeline] = await Promise.all([query(hitsSql), query(timelineSql)]);
     return {
         tokens,
-        total: Number(count.data[0]?.matches ?? 0),
+        total: sumValues(timeline),
         hits: hits.data.map((row) => ({
             title: row.type === 2 ? `Comment by ${row.author || '[deleted]'}` : (row.title || `Hacker News item by ${row.author || '[deleted]'}`),
             url: `https://news.ycombinator.com/item?id=${row.id}`,
@@ -64,7 +63,7 @@ ORDER BY bucket, series`;
             meta: [`${row.score} points`, String(row.created).slice(0, 10), row.author, row.type === 1 ? 'story' : row.type === 2 ? 'comment' : 'other'],
         })),
         timeline: { title: 'Matching items per month by type', kind: 'stack', result: timeline },
-        queries: [{ title: 'Top Hacker News items', ...hits }, { title: 'Matching items', ...count }],
+        queries: [{ title: 'Top Hacker News items', ...hits }],
     };
 }
 
