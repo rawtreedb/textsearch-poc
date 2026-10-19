@@ -9,12 +9,12 @@ Full-text search and analytics demos on large, static, long-text datasets, the s
 | `/hackernews/` | Hacker News items from the 2023-08-18 public Parquet snapshot | `/api/hackernews/<route>` |
 | `/amazon/` | Amazon customer reviews from the 1990s through 2015 | `/api/amazon/<route>` |
 | `/arxiv/` | arXiv paper metadata and abstracts (`librarian-bots/arxiv-metadata-snapshot`) | `/api/arxiv/<route>` |
-| `/reddit/` | Reddit comments from 2012-01 through 2016-02 (`fddemarco/pushshift-reddit-comments`) | `/api/reddit/<route>` |
+| `/reddit/` | Disabled for now: the table was dropped. Add `reddit` to `DATASETS` after reloading it. Reddit comments from 2012-01 through 2016-02 (`fddemarco/pushshift-reddit-comments`) | `/api/reddit/<route>` |
 | `/gutenberg/` | Project Gutenberg whole books (`sedthh/gutenberg_english`) | `/api/gutenberg/<route>` |
 | `/loghub/` | Loghub v1 system logs (Zenodo, CC-BY-4.0) | `/api/loghub/<route>` |
 | `/laion/` (opt-in; disabled by default) | LAION-400M image URLs, captions and CLIP ViT-B/32 image embeddings | `/api/laion/<route>` |
 
-Each dataset lives in `datasets/<id>/`: `api.mjs` (routes), `public/` (UI), and its loader scripts. `lib/rawtree.mjs` is the shared RawTree API client. `server.mjs` loads the datasets listed in `DATASETS` (default `wikipedia,stackoverflow,hackernews,amazon,arxiv,reddit,gutenberg,loghub`).
+Each dataset lives in `datasets/<id>/`: `api.mjs` (routes), `public/` (UI), and its loader scripts. `lib/rawtree.mjs` is the shared RawTree API client. `server.mjs` loads the datasets listed in `DATASETS` (default `wikipedia,stackoverflow,hackernews,amazon,arxiv,gutenberg,loghub`).
 
 LAION remains in the repository but is disabled by default. To serve `/laion/`, add `laion` to `DATASETS` (for example, `DATASETS=wikipedia,stackoverflow,laion`) and load its data with `node datasets/laion/load.mjs`.
 
@@ -33,7 +33,7 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | `hackernews_items` | [Hacker News public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/hackernews/2023-08-18.parquet): `id, deleted, type, by, time, text, dead, parent, url, score, title, ...` | 37,171,166 | `datasets/hackernews/load.mjs` |
 | `amazon_reviews` | [Amazon Reviews Parquet files](https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/): 1990s, 2000s, and 2010-2015 files | All source rows | `datasets/amazon/load.mjs` |
 | `arxiv_papers` | [`librarian-bots/arxiv-metadata-snapshot`](https://huggingface.co/datasets/librarian-bots/arxiv-metadata-snapshot), 11 Parquet files: `id, title, authors, categories, abstract, versions, update_date` | All source rows | `datasets/arxiv/load.mjs` |
-| `reddit_comments_v2` | [`fddemarco/pushshift-reddit-comments`](https://huggingface.co/datasets/fddemarco/pushshift-reddit-comments), monthly Parquet files `RC_2012-01` through `RC_2016-02` | ~1.64B: every month except 2015-04 and 2015-12 through 2016-02 | `datasets/reddit/load.mjs` |
+| `reddit_comments_v2` | [`fddemarco/pushshift-reddit-comments`](https://huggingface.co/datasets/fddemarco/pushshift-reddit-comments), monthly Parquet files `RC_2012-01` through `RC_2016-02` | Not loaded (dropped; the last load had ~1.64B rows, missing 2015-04 and 2015-12 through 2016-02) | `datasets/reddit/load.mjs` |
 | `gutenberg_books` | [`sedthh/gutenberg_english`](https://huggingface.co/datasets/sedthh/gutenberg_english), 37 Parquet files; one row per whole book | 48,284 | `datasets/gutenberg/load.mjs` |
 | `loghub_lines` | [Loghub v1](https://zenodo.org/records/8196385), 19 `.zip`/`.tar.gz` archives; HDFS_v3_TraceBench is excluded because it contains structured traces, not log lines | ~480M log lines from the remaining 18 archives | `datasets/loghub/load.mjs` |
 | `laion_images` | [LAION-400M embeddings](https://deploy.laion.ai/8f83b608504d46bb81708ec86e912220/embeddings/), aligned `metadata/metadata_{N}.parquet` and `img_emb/img_emb_{N}.npy`: public `url`, `caption`, LAION caption-image similarity, original dimensions and normalized 512-d CLIP ViT-B/32 image vector | 2M rows per shard ID range (shard 0 has 1,000,448 rows) | `datasets/laion/load.mjs` |
@@ -139,7 +139,7 @@ node server.mjs                      # http://localhost:3000
 | `RAWTREE_QUERY_API_KEY` | `RAWTREE_API_KEY` | Optional `read_only` key for search queries |
 | `RAWTREE_DATABASE` | `textsearch` | Database |
 | `RAWTREE_API_URL` | `https://api.rawtree.com` | API base URL |
-| `DATASETS` | `wikipedia,stackoverflow,hackernews,amazon,arxiv,reddit,gutenberg,loghub` | Datasets to serve |
+| `DATASETS` | `wikipedia,stackoverflow,hackernews,amazon,arxiv,gutenberg,loghub` | Datasets to serve |
 | `DATA_DIR` | `/data` | Loader download and resume-state directory |
 | `PORT` | `3000` | HTTP port |
 
