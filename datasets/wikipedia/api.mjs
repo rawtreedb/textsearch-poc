@@ -1,10 +1,14 @@
 // Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
+// Matches are ranked by per-title totals (`wikipedia_title_views`); hourly charts read pageviews only for the top-ranked titles,
+// because a common term matches tens of thousands of titles, which makes the pageviews scan cost most of the table.
 import { semanticQuery } from '../../lib/text_embed.mjs';
 import { literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const ARTICLES = 'wikipedia_articles';
 const PAGEVIEWS = 'wikipedia_pageviews';
+const TITLE_VIEWS = 'wikipedia_title_views';
+const CHART_TITLES = 20;
 const TITLE = 'lowerUTF8(title::String)';
 const TEXT = 'lowerUTF8(text::String)';
 const FIELDS = ['text', 'title', 'both'];
@@ -29,6 +33,21 @@ function buildFilter(params)
     return { tokens, mode, field, where, matches };
 }
 
+const titleList = (titles) => titles.length ? titles.map(literal).join(', ') : "''";
+
+const topTitlesSql = (matches, limit) => `WITH ${matches}
+SELECT ${PAGE_TITLE} AS page_title, total::Int64 AS views
+FROM ${TITLE_VIEWS}
+WHERE ${PAGE_TITLE} IN matches
+ORDER BY views DESC
+LIMIT ${limit}`;
+
+const hourlySql = (titles) => `SELECT hour::DateTime AS bucket, if(domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(count_views::Int64) AS value
+FROM ${PAGEVIEWS}
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${titleList(titles)})
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+
 async function search(params)
 {
     if (params.get('mode') === 'semantic')
@@ -39,30 +58,21 @@ async function search(params)
     const countSql = `SELECT count() AS matches
 FROM ${ARTICLES}
 WHERE ${where}`;
-    const topSql = `WITH ${matches}
-SELECT ${PAGE_TITLE} AS page_title, sum(count_views::Int64) AS views
-FROM ${PAGEVIEWS}
-WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
-GROUP BY page_title
-ORDER BY views DESC
-LIMIT ${limit}`;
-    const timelineSql = `WITH ${matches}
-SELECT hour::DateTime AS bucket, if(domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(count_views::Int64) AS value
-FROM ${PAGEVIEWS}
-WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
-GROUP BY bucket, series
-ORDER BY bucket, series`;
-    const [count, top, timeline] = await Promise.all([query(countSql), query(topSql), query(timelineSql)]);
+    const [count, top] = await Promise.all([query(countSql), query(topTitlesSql(matches, limit))]);
 
     // Snippets for the most viewed articles; if the pageviews table has no match yet, fall back to arbitrary matching articles.
     const titles = top.data.map((row) => row.page_title.replaceAll('_', ' '));
+    const chartTitles = top.data.slice(0, CHART_TITLES).map((row) => row.page_title);
     const hitsSql = `SELECT title::String AS title, url::String AS url,
        length(text::String) AS bytes,
        ${snippet('text::String', tokens)} AS snippet
 FROM ${ARTICLES}
 WHERE ${titles.length ? `title::String IN (${titles.map(literal).join(', ')})` : where}
 LIMIT ${limit}`;
-    const hits = await query(hitsSql);
+    const [hits, timeline] = await Promise.all([
+        query(hitsSql),
+        chartTitles.length ? query(hourlySql(chartTitles)) : Promise.resolve({ data: [], sql: '' }),
+    ]);
     const views = new Map(top.data.map((row) => [row.page_title.replaceAll('_', ' '), Number(row.views)]));
     const rows = hits.data
         .map((row) => ({ ...row, views: views.get(row.title) ?? 0 }))
@@ -77,8 +87,8 @@ LIMIT ${limit}`;
         tokens,
         total: Number(count.data[0]?.matches ?? 0),
         hits: rows,
-        timeline: { title: 'Hourly pageviews of matching articles', kind: 'stack', result: timeline },
-        queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }],
+        timeline: { title: `Hourly pageviews of the ${chartTitles.length} most viewed matches`, kind: 'stack', result: timeline },
+        queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }, { title: 'Hourly pageviews', ...timeline }],
     };
 }
 
@@ -93,17 +103,11 @@ async function semanticSearch(params)
 FROM ${ARTICLES}
 WHERE ${titles.length ? `title::String IN (${titles.map(literal).join(', ')})` : '0'}`;
     const pageTitles = titles.map((title) => title.replaceAll(' ', '_'));
-    const pageTitleList = pageTitles.length ? pageTitles.map(literal).join(', ') : "''";
-    const viewsSql = `SELECT ${PAGE_TITLE} AS page_title, sum(count_views::Int64) AS views
-FROM ${PAGEVIEWS}
-WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${pageTitleList})
-GROUP BY page_title
+    const viewsSql = `SELECT ${PAGE_TITLE} AS page_title, total::Int64 AS views
+FROM ${TITLE_VIEWS}
+WHERE ${PAGE_TITLE} IN (${titleList(pageTitles)})
 ORDER BY views DESC`;
-    const timelineSql = `SELECT hour::DateTime AS bucket, if(domain_code::String = 'en', 'desktop', 'mobile') AS series, sum(count_views::Int64) AS value
-FROM ${PAGEVIEWS}
-WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${pageTitleList})
-GROUP BY bucket, series
-ORDER BY bucket, series`;
+    const timelineSql = hourlySql(pageTitles);
     const [snippets, views, timeline] = await Promise.all([
         query(snippetsSql),
         titles.length ? query(viewsSql) : Promise.resolve({ data: [], sql: viewsSql }),
@@ -137,30 +141,36 @@ ORDER BY bucket, series`;
 async function analytics(params)
 {
     const { where, matches } = buildFilter(params);
-    const topArticlesSql = `WITH ${matches},
-top AS (
-    SELECT ${PAGE_TITLE} AS t FROM ${PAGEVIEWS}
-    WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
-    GROUP BY t ORDER BY sum(count_views::Int64) DESC LIMIT 6
-)
-SELECT toStartOfInterval(hour::DateTime, INTERVAL 6 HOUR) AS bucket,
-       replaceAll(if(${PAGE_TITLE} IN top, ${PAGE_TITLE}, 'other'), '_', ' ') AS series,
+    // On failure only the pageview panels come back empty; the article panels still run.
+    const top = await query(topTitlesSql(matches, CHART_TITLES)).catch(() => ({ data: [] }));
+    const titles = top.data.map((row) => row.page_title);
+    const topArticlesSql = `SELECT toStartOfInterval(hour::DateTime, INTERVAL 6 HOUR) AS bucket,
+       replaceAll(if(${PAGE_TITLE} IN (${titleList(titles.slice(0, 6))}), ${PAGE_TITLE}, 'other'), '_', ' ') AS series,
        sum(count_views::Int64) AS value
 FROM ${PAGEVIEWS}
-WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
+WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${titleList(titles)})
 GROUP BY bucket, series
 ORDER BY bucket, value DESC`;
+    // Busiest hour over the charted titles; totals over all matches.
     const peakSql = `WITH ${matches}
-SELECT argMax(hour, views) AS busiest_hour, max(views) AS busiest_hour_views, round(avg(views)) AS avg_views_per_hour,
-       sum(views) AS total_views, round(sum(mobile) / sum(views) * 100, 1) AS mobile_percent
+SELECT busiest_hour, busiest_hour_views, total_views, mobile_percent
 FROM
 (
-    SELECT hour::DateTime AS hour, sum(count_views::Int64) AS views,
-           sumIf(count_views::Int64, domain_code::String = 'en.m') AS mobile
-    FROM ${PAGEVIEWS}
-    WHERE ${WIKIS} AND ${PAGE_TITLE} IN matches
-    GROUP BY hour
-)`;
+    SELECT argMax(hour, views) AS busiest_hour, max(views) AS busiest_hour_views
+    FROM
+    (
+        SELECT hour::DateTime AS hour, sum(count_views::Int64) AS views
+        FROM ${PAGEVIEWS}
+        WHERE ${WIKIS} AND ${PAGE_TITLE} IN (${titleList(titles)})
+        GROUP BY hour
+    )
+) AS peak
+CROSS JOIN
+(
+    SELECT sum(total::Int64) AS total_views, round(sum(mobile::Int64) / sum(total::Int64) * 100, 1) AS mobile_percent
+    FROM ${TITLE_VIEWS}
+    WHERE ${PAGE_TITLE} IN matches
+) AS totals`;
     const lengthSql = `SELECT multiIf(b < 2048, '< 2 KB', b < 8192, '2-8 KB', b < 32768, '8-32 KB', b < 131072, '32-128 KB', '>= 128 KB') AS label, count() AS value, min(b) AS min_bytes
 FROM (SELECT length(text::String) AS b FROM ${ARTICLES} WHERE ${where})
 GROUP BY label
@@ -171,8 +181,8 @@ WHERE ${where}
 ORDER BY value DESC
 LIMIT 10`;
     const panels = await Promise.all([
-        panel({ title: 'Pageviews of the top matching articles (6-hour buckets)', kind: 'stack', wide: true }, query(topArticlesSql)),
-        panel({ title: 'Peak hour', kind: 'kv' }, query(peakSql)),
+        panel({ title: `Pageviews of the ${titles.length} most viewed matches (6-hour buckets, top 6 named)`, kind: 'stack', wide: true }, query(topArticlesSql)),
+        panel({ title: `Peak hour (${titles.length} most viewed matches) and totals (all matches)`, kind: 'kv' }, query(peakSql)),
         panel({ title: 'Matching articles by length', kind: 'bars' }, query(lengthSql)),
         panel({ title: 'Longest matching articles (KB)', kind: 'bars' }, query(longestSql)),
     ]);

@@ -27,6 +27,7 @@ Tables are raw RawTree tables (`__raw_data JSON`) holding the source rows, like 
 | `wikipedia_articles` | [`wikimedia/wikipedia`](https://huggingface.co/datasets/wikimedia/wikipedia) `20231101.en`, 41 Parquet files (11.6 GB): `id, url, title, text` | 6.4M | `datasets/wikipedia/load.mjs` |
 | `wikipedia_vectors` | The same 41 Parquet files; article title + text embedded with `Xenova/all-MiniLM-L6-v2` (384 dimensions) | 6.4M | `datasets/wikipedia/embed.mjs` |
 | `wikipedia_pageviews` | [hourly pageview dumps](https://dumps.wikimedia.org/other/pageviews/), `en` (desktop) and `en.m` (mobile) lines: `domain_code, page_title, count_views, total_response_size, hour` | ~2.1M per hour (~350M per week) | `datasets/wikipedia/load_pageviews.mjs` |
+| `wikipedia_title_views` | per-title totals of `wikipedia_pageviews`: `page_title, desktop, mobile, total`, sorting key `page_title` | ~14M | `datasets/wikipedia/load_title_views.mjs` |
 | `stackoverflow_posts` | [ClickHouse public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2008.parquet), one Parquet file per year 2008-2024 (38 GB): `Id, PostTypeId, ParentId, Title, Body, Tags, Score, ViewCount, CreationDate, ...` | ~60M | `datasets/stackoverflow/load.mjs` |
 | `stackoverflow_vectors` | The same yearly Parquet files; questions only, title + plain-text body embedded with `Xenova/all-MiniLM-L6-v2` (384 dimensions) | ~21M questions | `datasets/stackoverflow/embed.mjs` |
 | `hackernews_items` | [Hacker News public dataset](https://datasets-documentation.s3.eu-west-3.amazonaws.com/hackernews/2023-08-18.parquet): `id, deleted, type, by, time, text, dead, parent, url, score, title, ...` | 37,171,166 | `datasets/hackernews/load.mjs` |
@@ -43,6 +44,7 @@ The article, Stack Overflow, four text-dataset, and Gutenberg loaders use server
 node datasets/wikipedia/load.mjs                      # --langs en --snapshot 20231101 --files N (first N files per language)
 node datasets/wikipedia/embed.mjs                     # --table wikipedia_vectors --files N --limit N --workers W --threads T --batch 1000
 node datasets/wikipedia/load_pageviews.mjs            # --from 2023-10-25 --days 7 --wikis en,en.m --concurrency 3
+node datasets/wikipedia/load_title_views.mjs          # after pageviews; delete the table first to rebuild it
 node datasets/stackoverflow/load.mjs                  # --from 2008 --to 2024
 node datasets/stackoverflow/embed.mjs                 # --from 2008 --to 2024 --table stackoverflow_vectors --workers W --threads T --batch 1000
 node datasets/hackernews/load.mjs
