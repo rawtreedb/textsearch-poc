@@ -49,7 +49,10 @@ async function search(params)
 {
     const { tokens, where, matches } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const top = await query(topTitlesSql(matches, limit));
+    const countSql = `SELECT count() AS matches
+FROM ${ARTICLES}
+WHERE ${where}`;
+    const [count, top] = await Promise.all([query(countSql), query(topTitlesSql(matches, limit))]);
 
     // Snippets for the most viewed articles; if the pageviews table has no match yet, fall back to arbitrary matching articles.
     const titles = top.data.map((row) => row.page_title.replaceAll('_', ' '));
@@ -76,9 +79,10 @@ LIMIT ${limit}`;
         }));
     return {
         tokens,
+        total: Number(count.data[0]?.matches ?? 0),
         hits: rows,
         timeline: { title: `Hourly pageviews of the ${chartTitles.length} most viewed matches`, kind: 'stack', result: timeline },
-        queries: [{ title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }, { title: 'Hourly pageviews', ...timeline }],
+        queries: [{ title: 'Matching articles', ...count }, { title: 'Most viewed matches', ...top }, { title: 'Snippets', ...hits }, { title: 'Hourly pageviews', ...timeline }],
     };
 }
 
