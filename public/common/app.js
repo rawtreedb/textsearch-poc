@@ -289,7 +289,7 @@ async function run(push = false)
         const hits = r.hits ?? [];
         const results = new Map([...(r.queries ?? []), r.timeline && { title: r.timeline.title, ...r.timeline.result }].filter((q) => q?.sql).map((q) => [q.sql, q]));
         renderQueries([...results.values()]);
-        $('meta').innerHTML = `<span><b>${num(r.total)}</b> matches</span><span>showing <b>${hits.length}</b></span>${rawtreeLine([...results.values()], started)}`;
+        $('meta').innerHTML = `${r.total !== undefined ? `<span><b>${num(r.total)}</b> matches</span>` : ''}<span>showing <b>${hits.length}</b></span>${rawtreeLine([...results.values()], started)}`;
         if (APP.results === 'images')
         {
             $('hits').innerHTML = `<div class="image-grid">${hits.map((h) => `<article class="image-tile">

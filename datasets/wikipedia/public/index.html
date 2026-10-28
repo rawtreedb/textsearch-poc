@@ -19,13 +19,13 @@ window.APP = {
   title: 'Full-text search and pageview analytics over all of English Wikipedia.',
   eyebrow: 'Static dataset · English Wikipedia',
   lead: '6.4M articles (Nov 2023 snapshot) stored in RawTree as raw JSON with a text index, joined with a week of hourly Wikimedia pageviews. Results are ranked by views.',
-  placeholder: 'Search articles, e.g. quantum entanglement, "to be or not to be"',
+  placeholder: 'Search articles, e.g. quantum entanglement',
   source: 'Wikimedia (wikimedia/wikipedia 20231101.en, pageview dumps)',
   stats: [['articles', 'Articles'], ['text_bytes', 'Article text', 'bytes'], ['pageview_rows', 'Pageview rows']],
   api: '/api/wikipedia',
   filters: [{ name: 'field', label: 'Field', options: [['text', 'article text'], ['title', 'title'], ['both', 'title or text']] }],
   modes: [['all', 'All words'], ['any', 'Any word'], ['phrase', 'Exact phrase']],
-  examples: [{ q: 'quantum entanglement' }, { q: 'to be or not to be', mode: 'phrase' }, { q: 'taylor swift' }, { q: 'eiffel', field: 'title' }, { q: 'überlingen' }],
+  examples: [{ q: 'quantum entanglement' }, { q: 'taylor swift' }, { q: 'eiffel', field: 'title' }, { q: 'überlingen' }],
 };
 </script>
 <script src="/common/app.js"></script>
