@@ -38,9 +38,9 @@ async function search(params)
 {
     const { tokens, where } = buildFilter(params);
     const limit = intParam(params, 'limit', 20, 1, 100);
-    const order = params.get('sort') === 'recent'
-        ? `${REVIEW_DATE} DESC`
-        : 'helpful_votes::Int64 DESC, total_votes::Int64 DESC';
+    const order = params.get('sort') === 'helpful'
+        ? 'helpful_votes::Int64 DESC, total_votes::Int64 DESC'
+        : `${REVIEW_DATE} DESC`;
     const hitsSql = `SELECT review_id::String AS id, product_id::String AS product_id,
        product_title::String AS product_title, review_headline::String AS headline,
        star_rating::Int64 AS rating, helpful_votes::Int64 AS helpful, total_votes::Int64 AS total_votes,
