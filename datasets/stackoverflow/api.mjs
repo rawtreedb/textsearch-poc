@@ -99,8 +99,8 @@ async function warmup()
     const plainBody = `replaceRegexpAll(replaceRegexpAll(__raw_data.Body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
     const where = `__raw_data.PostTypeId::Int64 IN (1, 2)
   AND (${textCondition('lowerUTF8(__raw_data.Title::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.Body::String)', tokens, mode)})`;
-    const limit = intParam(params, 'limit', 20, 1, 100);
-    const sort = params.get('sort') === 'recent' ? `${created} DESC` : '__raw_data.Score::Int64 DESC';
+    const limit = 20;
+    const sort = '__raw_data.Score::Int64 DESC';
     const hitsSql = `SELECT __raw_data.Id::Int64 AS id, __raw_data.PostTypeId::Int64 AS type,
        toInt64OrZero(toString(__raw_data.ParentId)) AS parent_id,
        __raw_data.Title::String AS title, __raw_data.Tags::String AS tags,

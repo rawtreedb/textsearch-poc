@@ -77,11 +77,10 @@ async function warmup()
     const where = [
         '__raw_data.deleted::UInt8 = 0',
         '__raw_data.dead::UInt8 = 0',
-        '1',
         `(${textCondition('lowerUTF8(__raw_data.title::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.text::String)', tokens, mode)})`,
     ].join('\n  AND ');
-    const limit = intParam(params, 'limit', 20, 1, 100);
-    const order = params.get('sort') === 'recent' ? `${date} DESC` : '__raw_data.score::Int64 DESC';
+    const limit = 20;
+    const order = '__raw_data.score::Int64 DESC';
     const hitsSql = `SELECT __raw_data.id::Int64 AS id, __raw_data.type::Int64 AS type, ${author} AS author,
        __raw_data.title::String AS title, ${snippet(plainText, tokens)} AS snippet,
        __raw_data.score::Int64 AS score, ${date} AS created

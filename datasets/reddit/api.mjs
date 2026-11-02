@@ -66,8 +66,8 @@ async function warmup()
     const { tokens, mode } = parseSearch(params);
     const date = 'toDateTime(__raw_data.created_utc::Int64)';
     const where = textCondition('lowerUTF8(__raw_data.body::String)', tokens, mode);
-    const limit = intParam(params, 'limit', 20, 1, 100);
-    const order = params.get('sort') === 'recent' ? `${date} DESC` : '__raw_data.score::Int64 DESC';
+    const limit = 20;
+    const order = '__raw_data.score::Int64 DESC';
     const hitsSql = `SELECT __raw_data.id::String AS id, __raw_data.link_id::String AS link_id, __raw_data.subreddit::String AS subreddit,
        __raw_data.author::String AS author, __raw_data.score::Int64 AS score, __raw_data.controversiality::Int64 AS controversiality,
        ${date} AS created, ${snippet('__raw_data.body::String', tokens)} AS snippet

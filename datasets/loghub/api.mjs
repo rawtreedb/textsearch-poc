@@ -49,8 +49,8 @@ async function warmup()
     const { tokens, mode } = parseSearch(params);
     const timestamp = 'parseDateTimeBestEffortOrNull(__raw_data.ts::String)';
     const where = textCondition('lowerUTF8(__raw_data.message::String)', tokens, mode);
-    const limit = intParam(params, 'limit', 30, 1, 100);
-    const order = params.get('sort') === 'system' ? '__raw_data.system, __raw_data.file, __raw_data.line_no' : '__raw_data.ts::String DESC';
+    const limit = 30;
+    const order = '__raw_data.ts::String DESC';
     const hitsSql = `SELECT __raw_data.system, __raw_data.file, __raw_data.line_no, __raw_data.ts, __raw_data.level, __raw_data.component,
        __raw_data.message, __raw_data.label::String AS label, ${snippet('__raw_data.message::String', tokens)} AS snippet
 FROM ${allReplicas(TABLE)} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`;

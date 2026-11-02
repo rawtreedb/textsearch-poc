@@ -85,10 +85,8 @@ async function warmup()
     const date = `toDate('1970-01-01') + __raw_data.review_date::UInt16`;
     const where = `(${textCondition('lowerUTF8(__raw_data.review_headline::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.review_body::String)', tokens, mode)})`;
     const plainBody = `replaceRegexpAll(replaceRegexpAll(__raw_data.review_body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
-    const limit = intParam(params, 'limit', 20, 1, 100);
-    const order = params.get('sort') === 'helpful'
-        ? '__raw_data.helpful_votes::Int64 DESC, __raw_data.total_votes::Int64 DESC'
-        : `${date} DESC`;
+    const limit = 20;
+    const order = `${date} DESC`;
     const hitsSql = `SELECT __raw_data.review_id::String AS id, __raw_data.product_id::String AS product_id,
        __raw_data.product_title::String AS product_title, __raw_data.review_headline::String AS headline,
        __raw_data.star_rating::Int64 AS rating, __raw_data.helpful_votes::Int64 AS helpful, __raw_data.total_votes::Int64 AS total_votes,
