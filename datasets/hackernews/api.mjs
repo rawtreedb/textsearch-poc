@@ -120,4 +120,5 @@ export default {
     title: 'Hacker News',
     description: 'Full-text search over Hacker News stories and comments with author, date and score analytics.',
     routes: { search, analytics, stats },
+    warmup: { q: 'show hn' },
 };

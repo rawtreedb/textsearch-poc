@@ -119,4 +119,5 @@ export default {
     title: 'arXiv',
     description: 'Search arXiv titles and abstracts by archive category and first submission year.',
     routes: { search, analytics, stats },
+    warmup: { q: 'graph neural networks' },
 };

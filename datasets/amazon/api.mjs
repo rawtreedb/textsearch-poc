@@ -137,4 +137,5 @@ export default {
     title: 'Amazon',
     description: 'Search Amazon customer reviews from the 1990s through 2015 by headline, body, rating and product category.',
     routes: { search, analytics, stats },
+    warmup: { q: 'excellent quality' },
 };

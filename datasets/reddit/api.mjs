@@ -113,4 +113,5 @@ export default {
     title: 'Reddit',
     description: 'Search historical Reddit comments by text, subreddit, author, year and score.',
     routes: { search, analytics, stats },
+    warmup: { q: 'favorite recipe' },
 };

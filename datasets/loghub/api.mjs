@@ -63,4 +63,10 @@ async function stats()
     return result.data[0];
 }
 
-export default { id: 'loghub', title: 'Loghub', description: 'Search a collection of system logs.', routes: { search, analytics, stats } };
+export default {
+    id: 'loghub',
+    title: 'Loghub',
+    description: 'Search a collection of system logs.',
+    routes: { search, analytics, stats },
+    warmup: { q: 'connection refused' },
+};
