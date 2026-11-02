@@ -1,7 +1,7 @@
 // Search, analytics and stats for Wikipedia articles (`wikipedia_articles`) joined with hourly pageviews (`wikipedia_pageviews`).
 // Matches are ranked by per-title totals (`wikipedia_title_views`); hourly charts read pageviews only for the top-ranked titles,
 // because a common term matches tens of thousands of titles, which makes the pageviews scan cost most of the table.
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const ARTICLES = 'wikipedia_articles';
@@ -86,6 +86,46 @@ LIMIT ${limit}`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'quantum entanglement' });
+    const { tokens, mode } = parseSearch(params);
+    const where = textCondition('lowerUTF8(__raw_data.text::String)', tokens, mode);
+    const matches = `matches AS (SELECT replaceAll(__raw_data.title::String, ' ', '_') FROM ${allReplicas(ARTICLES)} WHERE ${where})`;
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const countSql = `SELECT count() AS matches
+FROM ${allReplicas(ARTICLES)}
+WHERE ${where}`;
+    const topSql = `WITH ${matches}
+SELECT __raw_data.page_title::String AS page_title, __raw_data.total::Int64 AS views
+FROM ${allReplicas(TITLE_VIEWS)}
+WHERE __raw_data.page_title::String IN matches
+ORDER BY views DESC
+LIMIT ${limit}`;
+    const [, top] = await Promise.all([query(countSql), query(topSql)]);
+    const titles = top.data.map((row) => row.page_title.replaceAll('_', ' '));
+    const chartTitles = top.data.slice(0, CHART_TITLES).map((row) => row.page_title);
+    const titleList = (items) => items.length ? items.map(literal).join(', ') : "''";
+    const hitsSql = `SELECT __raw_data.title::String AS title, __raw_data.url::String AS url,
+       length(__raw_data.text::String) AS bytes,
+       ${snippet('__raw_data.text::String', tokens)} AS snippet
+FROM ${allReplicas(ARTICLES)}
+WHERE ${titles.length ? `__raw_data.title::String IN (${titleList(titles)})` : where}
+LIMIT ${limit}`;
+    const hourlySql = `SELECT __raw_data.hour::DateTime AS bucket,
+       if(__raw_data.domain_code::String = 'en', 'desktop', 'mobile') AS series,
+       sum(__raw_data.count_views::Int64) AS value
+FROM ${allReplicas(PAGEVIEWS)}
+WHERE __raw_data.domain_code::String IN ('en', 'en.m')
+  AND __raw_data.page_title::String IN (${titleList(chartTitles)})
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    await Promise.all([
+        query(hitsSql),
+        chartTitles.length ? query(hourlySql) : Promise.resolve({ data: [] }),
+    ]);
+}
+
 async function analytics(params)
 {
     const { where, matches } = buildFilter(params);
@@ -151,5 +191,5 @@ export default {
     title: 'Wikipedia',
     description: 'Full-text search over English Wikipedia articles, ranked and charted by hourly pageviews.',
     routes: { search, analytics, stats },
-    warmup: { q: 'quantum entanglement' },
+    warmup,
 };

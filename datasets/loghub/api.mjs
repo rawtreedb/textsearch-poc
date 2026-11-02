@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'loghub_lines';
@@ -43,6 +43,23 @@ async function search(params)
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'connection refused' });
+    const { tokens, mode } = parseSearch(params);
+    const timestamp = 'parseDateTimeBestEffortOrNull(__raw_data.ts::String)';
+    const where = textCondition('lowerUTF8(__raw_data.message::String)', tokens, mode);
+    const limit = intParam(params, 'limit', 30, 1, 100);
+    const order = params.get('sort') === 'system' ? '__raw_data.system, __raw_data.file, __raw_data.line_no' : '__raw_data.ts::String DESC';
+    const hitsSql = `SELECT __raw_data.system, __raw_data.file, __raw_data.line_no, __raw_data.ts, __raw_data.level, __raw_data.component,
+       __raw_data.message, __raw_data.label::String AS label, ${snippet('__raw_data.message::String', tokens)} AS snippet
+FROM ${allReplicas(TABLE)} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`;
+    const countSql = `SELECT count() AS matches FROM ${allReplicas(TABLE)} WHERE ${where}`;
+    const timeSql = `SELECT toStartOfMonth(${timestamp}) AS bucket, __raw_data.system AS series, count() AS value
+FROM ${allReplicas(TABLE)} WHERE ${where} AND ${timestamp} IS NOT NULL GROUP BY bucket, series ORDER BY bucket`;
+    await Promise.all([query(hitsSql), query(countSql), query(timeSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = filter(params);
@@ -68,5 +85,5 @@ export default {
     title: 'Loghub',
     description: 'Search a collection of system logs.',
     routes: { search, analytics, stats },
-    warmup: { q: 'connection refused' },
+    warmup,
 };
