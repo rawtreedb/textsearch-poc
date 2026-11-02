@@ -151,4 +151,5 @@ export default {
     title: 'Wikipedia',
     description: 'Full-text search over English Wikipedia articles, ranked and charted by hourly pageviews.',
     routes: { search, analytics, stats },
+    warmup: { q: 'quantum entanglement' },
 };

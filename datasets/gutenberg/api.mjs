@@ -96,4 +96,10 @@ async function stats()
     return result.data[0];
 }
 
-export default { id: 'gutenberg', title: 'Gutenberg', description: 'Search whole Project Gutenberg books by text, title and author.', routes: { search, analytics, stats } };
+export default {
+    id: 'gutenberg',
+    title: 'Gutenberg',
+    description: 'Search whole Project Gutenberg books by text, title and author.',
+    routes: { search, analytics, stats },
+    warmup: { q: 'sea voyage' },
+};

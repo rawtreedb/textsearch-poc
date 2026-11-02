@@ -147,4 +147,5 @@ export default {
     title: 'Stack Overflow',
     description: 'Full-text search over Stack Overflow questions and answers (2008-2024), with tag, score and time analytics.',
     routes: { search, analytics, stats },
+    warmup: { q: 'borrow checker' },
 };
