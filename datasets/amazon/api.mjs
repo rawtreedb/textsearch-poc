@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'amazon_reviews';
@@ -78,6 +78,34 @@ ORDER BY bucket, series`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'excellent quality' });
+    const { tokens, mode } = parseSearch(params);
+    const date = `toDate('1970-01-01') + __raw_data.review_date::UInt16`;
+    const where = `(${textCondition('lowerUTF8(__raw_data.review_headline::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.review_body::String)', tokens, mode)})`;
+    const plainBody = `replaceRegexpAll(replaceRegexpAll(__raw_data.review_body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
+    const limit = 20;
+    const order = `${date} DESC`;
+    const hitsSql = `SELECT __raw_data.review_id::String AS id, __raw_data.product_id::String AS product_id,
+       __raw_data.product_title::String AS product_title, __raw_data.review_headline::String AS headline,
+       __raw_data.star_rating::Int64 AS rating, __raw_data.helpful_votes::Int64 AS helpful, __raw_data.total_votes::Int64 AS total_votes,
+       __raw_data.verified_purchase::Bool AS verified, __raw_data.product_category::String AS category,
+       ${date} AS review_date, ${snippet(plainBody, tokens)} AS snippet
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+ORDER BY ${order}
+LIMIT ${limit}`;
+    const timelineSql = `SELECT toStartOfQuarter(${date}) AS bucket,
+       if(__raw_data.star_rating::Int64 >= 4, '4-5 stars', if(__raw_data.star_rating::Int64 = 3, '3 stars', '1-2 stars')) AS series,
+       count() AS value
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    await Promise.all([query(hitsSql), query(timelineSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -137,5 +165,5 @@ export default {
     title: 'Amazon',
     description: 'Search Amazon customer reviews from the 1990s through 2015 by headline, body, rating and product category.',
     routes: { search, analytics, stats },
-    warmup: { q: 'excellent quality' },
+    warmup,
 };

@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'reddit_comments_v2';
@@ -60,6 +60,29 @@ ORDER BY bucket`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'favorite recipe' });
+    const { tokens, mode } = parseSearch(params);
+    const date = 'toDateTime(__raw_data.created_utc::Int64)';
+    const where = textCondition('lowerUTF8(__raw_data.body::String)', tokens, mode);
+    const limit = 20;
+    const order = '__raw_data.score::Int64 DESC';
+    const hitsSql = `SELECT __raw_data.id::String AS id, __raw_data.link_id::String AS link_id, __raw_data.subreddit::String AS subreddit,
+       __raw_data.author::String AS author, __raw_data.score::Int64 AS score, __raw_data.controversiality::Int64 AS controversiality,
+       ${date} AS created, ${snippet('__raw_data.body::String', tokens)} AS snippet
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+ORDER BY ${order}
+LIMIT ${limit}`;
+    const timelineSql = `SELECT toStartOfMonth(${date}) AS bucket, 'comments' AS series, count() AS value
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket`;
+    await Promise.all([query(hitsSql), query(timelineSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -113,5 +136,5 @@ export default {
     title: 'Reddit',
     description: 'Search historical Reddit comments by text, subreddit, author, year and score.',
     routes: { search, analytics, stats },
-    warmup: { q: 'favorite recipe' },
+    warmup,
 };

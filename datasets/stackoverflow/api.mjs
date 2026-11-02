@@ -1,5 +1,5 @@
 // Search, analytics and stats for Stack Overflow posts (`stackoverflow_posts`, questions and answers 2008-2024).
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const POSTS = 'stackoverflow_posts';
@@ -91,6 +91,34 @@ WHERE PostTypeId::Int64 = 1 AND Id::Int64 IN (${parentIds.join(', ')})`);
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'borrow checker' });
+    const { tokens, mode } = parseSearch(params);
+    const created = '__raw_data.CreationDate::DateTime64(3)';
+    const plainBody = `replaceRegexpAll(replaceRegexpAll(__raw_data.Body::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
+    const where = `__raw_data.PostTypeId::Int64 IN (1, 2)
+  AND (${textCondition('lowerUTF8(__raw_data.Title::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.Body::String)', tokens, mode)})`;
+    const limit = 20;
+    const sort = '__raw_data.Score::Int64 DESC';
+    const hitsSql = `SELECT __raw_data.Id::Int64 AS id, __raw_data.PostTypeId::Int64 AS type,
+       toInt64OrZero(toString(__raw_data.ParentId)) AS parent_id,
+       __raw_data.Title::String AS title, __raw_data.Tags::String AS tags,
+       __raw_data.Score::Int64 AS score, __raw_data.ViewCount::Int64 AS views, __raw_data.AnswerCount::Int64 AS answers,
+       ${created} AS created,
+       ${snippet(plainBody, tokens)} AS snippet
+FROM ${allReplicas(POSTS)}
+WHERE ${where}
+ORDER BY ${sort}
+LIMIT ${limit}`;
+    const timelineSql = `SELECT toStartOfMonth(${created}) AS bucket, if(__raw_data.PostTypeId::Int64 = 1, 'questions', 'answers') AS series, count() AS value
+FROM ${allReplicas(POSTS)}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    await Promise.all([query(hitsSql), query(timelineSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -147,5 +175,5 @@ export default {
     title: 'Stack Overflow',
     description: 'Full-text search over Stack Overflow questions and answers (2008-2024), with tag, score and time analytics.',
     routes: { search, analytics, stats },
-    warmup: { q: 'borrow checker' },
+    warmup,
 };

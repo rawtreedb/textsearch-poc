@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'gutenberg_books';
@@ -73,6 +73,23 @@ FROM ${TABLE} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'sea voyage' });
+    const { tokens, mode } = parseSearch(params);
+    const meta = '__raw_data.METADATA::String';
+    const text = '__raw_data.TEXT::String';
+    const where = textCondition('lowerUTF8(__raw_data.TEXT::String)', tokens, mode);
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const order = `JSONExtractInt(${meta}, 'text_id') ASC`;
+    const hitsSql = `SELECT JSONExtractInt(${meta}, 'text_id') AS id, JSONExtractString(${meta}, 'title') AS title,
+       JSONExtractRaw(${meta}, 'authors') AS authors, JSONExtractString(${meta}, 'issued') AS issued,
+       ${snippet(text, tokens)} AS snippet, lengthUTF8(${text}) AS text_length
+FROM ${allReplicas(TABLE)} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`;
+    const countSql = `SELECT count() AS matches FROM ${allReplicas(TABLE)} WHERE ${where}`;
+    await Promise.all([query(hitsSql), query(countSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -101,5 +118,5 @@ export default {
     title: 'Gutenberg',
     description: 'Search whole Project Gutenberg books by text, title and author.',
     routes: { search, analytics, stats },
-    warmup: { q: 'sea voyage' },
+    warmup,
 };

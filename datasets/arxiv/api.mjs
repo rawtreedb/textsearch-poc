@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'arxiv_papers';
@@ -68,6 +68,29 @@ ORDER BY bucket`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'graph neural networks' });
+    const { tokens, mode } = parseSearch(params);
+    const firstCreated = `arrayElement(__raw_data.versions::Array(Tuple(version String, created String)), 1).created`;
+    const firstDate = `parseDateTimeBestEffortOrNull(${firstCreated})`;
+    const where = `(${textCondition('lowerUTF8(__raw_data.title::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.abstract::String)', tokens, mode)})`;
+    const limit = intParam(params, 'limit', 20, 1, 100);
+    const hitsSql = `SELECT __raw_data.id::String AS id, __raw_data.title::String AS title, __raw_data.authors::String AS authors,
+       __raw_data.categories::String AS categories, ${firstDate} AS first_submission,
+       ${snippet('__raw_data.abstract::String', tokens)} AS snippet
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+ORDER BY ${firstDate} DESC
+LIMIT ${limit}`;
+    const timelineSql = `SELECT toStartOfYear(${firstDate}) AS bucket, 'papers' AS series, count() AS value
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket`;
+    await Promise.all([query(hitsSql), query(timelineSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -119,5 +142,5 @@ export default {
     title: 'arXiv',
     description: 'Search arXiv titles and abstracts by archive category and first submission year.',
     routes: { search, analytics, stats },
-    warmup: { q: 'graph neural networks' },
+    warmup,
 };

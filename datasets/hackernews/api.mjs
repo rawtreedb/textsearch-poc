@@ -1,4 +1,4 @@
-import { literal, query } from '../../lib/rawtree.mjs';
+import { allReplicas, literal, query } from '../../lib/rawtree.mjs';
 import { intParam, panel, parseSearch, snippet, sumValues, textCondition } from '../../lib/search.mjs';
 
 const TABLE = 'hackernews_items';
@@ -67,6 +67,37 @@ ORDER BY bucket, series`;
     };
 }
 
+async function warmup()
+{
+    const params = new URLSearchParams({ q: 'show hn' });
+    const { tokens, mode } = parseSearch(params);
+    const author = '__raw_data.`by`::String';
+    const date = 'toDateTime(__raw_data.time::UInt32)';
+    const plainText = `replaceRegexpAll(replaceRegexpAll(__raw_data.text::String, '<[^>]*>', ' '), '\\\\s+', ' ')`;
+    const where = [
+        '__raw_data.deleted::UInt8 = 0',
+        '__raw_data.dead::UInt8 = 0',
+        `(${textCondition('lowerUTF8(__raw_data.title::String)', tokens, mode)} OR ${textCondition('lowerUTF8(__raw_data.text::String)', tokens, mode)})`,
+    ].join('\n  AND ');
+    const limit = 20;
+    const order = '__raw_data.score::Int64 DESC';
+    const hitsSql = `SELECT __raw_data.id::Int64 AS id, __raw_data.type::Int64 AS type, ${author} AS author,
+       __raw_data.title::String AS title, ${snippet(plainText, tokens)} AS snippet,
+       __raw_data.score::Int64 AS score, ${date} AS created
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+ORDER BY ${order}
+LIMIT ${limit}`;
+    const timelineSql = `SELECT toStartOfMonth(${date}) AS bucket,
+       if(__raw_data.type::Int64 = 1, 'stories', if(__raw_data.type::Int64 = 2, 'comments', 'other')) AS series,
+       count() AS value
+FROM ${allReplicas(TABLE)}
+WHERE ${where}
+GROUP BY bucket, series
+ORDER BY bucket, series`;
+    await Promise.all([query(hitsSql), query(timelineSql)]);
+}
+
 async function analytics(params)
 {
     const { where } = buildFilter(params);
@@ -120,5 +151,5 @@ export default {
     title: 'Hacker News',
     description: 'Full-text search over Hacker News stories and comments with author, date and score analytics.',
     routes: { search, analytics, stats },
-    warmup: { q: 'show hn' },
+    warmup,
 };

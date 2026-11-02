@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const WARMUP_IDLE_MS = 5 * 60 * 1000;
 const DATASET_IDS = (process.env.DATASETS ?? 'wikipedia,stackoverflow,hackernews,amazon,arxiv,gutenberg,loghub').split(',').map((s) => s.trim()).filter(Boolean);
 
-// Each dataset module default-exports { id, title, description, routes: { name: async (URLSearchParams) => json }, warmup?: { q } }.
+// Each dataset module default-exports { id, title, description, routes: { name: async (URLSearchParams) => json }, warmup?: () => Promise<void> }.
 const datasets = new Map();
 const lastQueryAt = new Map();
 for (const id of DATASET_IDS)
@@ -25,10 +25,10 @@ for (const id of DATASET_IDS)
 function warmUp(id)
 {
     const dataset = datasets.get(id);
-    if (!dataset.warmup || Date.now() - (lastQueryAt.get(id) ?? 0) < WARMUP_IDLE_MS)
+    if (!dataset?.warmup || Date.now() - (lastQueryAt.get(id) ?? 0) < WARMUP_IDLE_MS)
         return;
     lastQueryAt.set(id, Date.now());
-    dataset.routes.search(new URLSearchParams(dataset.warmup))
+    dataset.warmup()
         .catch((error) => console.error(`[warmup] ${id}: ${error.message}`));
 }
 
@@ -98,6 +98,7 @@ createServer(async (req, res) =>
             return send(res, 200, [...datasets.values()].map(({ id, title, description }) => ({ id, title, description, path: `/${id}/` })));
         if (parts[0] === 'api' && parts.length === 3)
         {
+            warmUp(parts[1]);
             const handler = datasets.get(parts[1])?.routes?.[parts[2]];
             if (!handler || req.method !== 'GET')
                 return send(res, 404, { error: 'not found' });
@@ -112,14 +113,13 @@ createServer(async (req, res) =>
             return sendFile(res, join(here, 'public', 'common'), parts.slice(1).join('/'));
         if (datasets.has(parts[0]))
         {
+            warmUp(parts[0]);
             if (parts.length === 1 && !url.pathname.endsWith('/'))
             {
                 res.writeHead(301, { location: `/${parts[0]}/${url.search}` });
                 return res.end();
             }
             const relative = parts.slice(1).join('/') || 'index.html';
-            if (relative === 'index.html')
-                warmUp(parts[0]);
             return sendFile(res, join(here, 'datasets', parts[0], 'public'), relative);
         }
         return sendFile(res, join(here, 'public'), parts.join('/'));
