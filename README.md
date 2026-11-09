@@ -111,7 +111,7 @@ node server.mjs                      # http://localhost:3000
 |---|---|---|
 | `RAWTREE_API_KEY` | required | Key used by the loaders (and for queries if no query key) |
 | `RAWTREE_QUERY_API_KEY` | `RAWTREE_API_KEY` | Optional `read_only` key for search queries |
-| `RAWTREE_DATABASE` | `textsearch` | Database |
+| `RAWTREE_DATABASE` | `text_search` | Database |
 | `RAWTREE_API_URL` | `https://api.rawtree.com` | API base URL |
 | `DATASETS` | `wikipedia,stackoverflow,hackernews,amazon,arxiv,gutenberg,loghub` | Datasets to serve |
 | `DATA_DIR` | `/data` | Loader download and resume-state directory |
